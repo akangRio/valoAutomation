@@ -115,6 +115,31 @@
           "result": "Ensured clean process shutdown by gracefully closing Redis and database connection clients in teardown."
         }
       }
+    },
+    {
+      "taskId": "2.1",
+      "name": "Establish CV Slicer Worker and Python Virtual Env",
+      "timestamp": "2026-07-06T14:23:30.000Z",
+      "status": "COMPLETED",
+      "verification": {
+        "worker_scaffolding": {
+          "status": "passed",
+          "result": "Created standard tsconfig, package.json, and main entry point src/index.ts resolving BullMQ queue cv-slicer-queue."
+        },
+        "python_virtual_env": {
+          "status": "passed",
+          "path": "apps/cv-slicer-worker/venv",
+          "result": "Python 3 virtual environment created successfully and verified in target path."
+        },
+        "python_dependencies": {
+          "status": "passed",
+          "result": "Cleanly installed numpy and opencv-python inside virtual environment, outputting locked dependencies to requirements.txt."
+        },
+        "job_consumption": {
+          "status": "passed",
+          "result": "CV Slicer Worker successfully consumed waiting job from cv-slicer-queue, processed job data, and printed structured JSON logs."
+        }
+      }
     }
   ]
 }
