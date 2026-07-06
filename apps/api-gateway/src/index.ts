@@ -3,12 +3,15 @@ import { Server } from 'http';
 import { z } from 'zod';
 import { validateCreateJob } from './middleware/validator';
 import { createJob, getJobStatus } from './controllers/jobs';
+import { getQueuesStatus } from './controllers/queues';
 import { errorHandler } from './middleware/error';
+import { redisConnection } from './utils/queue';
 
 // 1. Validate environment variables early and loudly at process boot
 const envSchema = z.object({
   PORT: z.string().optional().default('3000'),
   DATABASE_URL: z.string().url('Invalid or missing DATABASE_URL'),
+  REDIS_URL: z.string().url('Invalid or missing REDIS_URL'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -35,6 +38,7 @@ app.use(express.json());
 // 3. Controller Routes
 app.post('/api/v1/jobs', validateCreateJob, createJob);
 app.get('/api/v1/jobs/:id', getJobStatus);
+app.get('/api/v1/queues/status', getQueuesStatus);
 
 // 4. Undefined Route Handler
 app.use((req, res, next) => {
@@ -59,5 +63,15 @@ const server: Server = app.listen(port, () => {
     }),
   );
 });
+
+// Function to handle graceful shutdown
+export const shutdown = async () => {
+  return new Promise<void>((resolve) => {
+    server.close(async () => {
+      await redisConnection.quit();
+      resolve();
+    });
+  });
+};
 
 export { app, server };

@@ -89,6 +89,32 @@
           "result": "Centralized, JSON-compliant error-catching middleware formatted response logs correctly."
         }
       }
+    },
+    {
+      "taskId": "1.4",
+      "name": "Configure Redis and BullMQ Queue Integration",
+      "timestamp": "2026-07-06T14:17:00.000Z",
+      "status": "COMPLETED",
+      "verification": {
+        "redis_connection": {
+          "status": "passed",
+          "result": "Zod schema validated and successfully connected to Redis via ConnectionOptions derived from REDIS_URL."
+        },
+        "job_enqueuing": {
+          "status": "passed",
+          "testedEndpoint": "POST /api/v1/jobs",
+          "result": "Express gateway successfully enqueued job payload with jobId and rawVideoPath to 'cv-slicer-queue' inside BullMQ."
+        },
+        "queues_status_api": {
+          "status": "passed",
+          "testedEndpoint": "GET /api/v1/queues/status",
+          "result": "Successfully returned statistics for all 5 pipeline queues, showing a waiting count of 1 in 'cv-slicer-queue'."
+        },
+        "teardown_and_cleanup": {
+          "status": "passed",
+          "result": "Ensured clean process shutdown by gracefully closing Redis and database connection clients in teardown."
+        }
+      }
     }
   ]
 }

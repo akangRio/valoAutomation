@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '@packages/database';
+import { cvSlicerQueue } from '../utils/queue';
 
 export const createJob = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -11,6 +12,12 @@ export const createJob = async (req: Request, res: Response, next: NextFunction)
         status: 'PENDING',
         currentStep: 'INIT',
       },
+    });
+
+    // Enqueue into cv-slicer-queue matching CVSlicerJobPayload schema
+    await cvSlicerQueue.add('cv-slice', {
+      jobId: job.id,
+      rawVideoPath: job.rawVideoPath,
     });
 
     res.status(202).json({

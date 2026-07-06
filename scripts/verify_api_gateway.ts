@@ -1,5 +1,13 @@
 import { app, server } from '../apps/api-gateway/src/index';
 import { prisma } from '@packages/database';
+import {
+  redisConnection,
+  cvSlicerQueue,
+  cloudAiQueue,
+  ttsVoiceQueue,
+  videoRenderQueue,
+  publishingQueue,
+} from '../apps/api-gateway/src/utils/queue';
 
 async function runTests() {
   console.log('🚀 Starting Express API Gateway integration verification...');
@@ -92,17 +100,59 @@ async function runTests() {
     }
     console.log('✅ Test 5 Passed: Catch-all undefined route handler functioning as expected.');
 
+    // -------------------------------------------------------------
+    // Test 6: GET /api/v1/queues/status - Queue Metrics
+    // -------------------------------------------------------------
+    console.log('\n📝 Test 6: GET /api/v1/queues/status - Queue Metrics');
+    const res6 = await fetch(`${baseUrl}/api/v1/queues/status`);
+    const data6 = (await res6.json()) as any;
+    console.log(`Status: ${res6.status}`);
+    console.log('Response:', JSON.stringify(data6, null, 2));
+
+    if (res6.status !== 200 || data6.status !== 'success') {
+      throw new Error('Test 6 failed: Expected status 200 and success status');
+    }
+
+    const cvSlicerStats = data6.data['cv-slicer-queue'];
+    if (!cvSlicerStats || typeof cvSlicerStats.waiting !== 'number') {
+      throw new Error('Test 6 failed: Missing or invalid cv-slicer-queue stats');
+    }
+
+    console.log(`cv-slicer-queue waiting jobs count: ${cvSlicerStats.waiting}`);
+    if (cvSlicerStats.waiting < 1) {
+      throw new Error('Test 6 failed: Expected cv-slicer-queue waiting jobs count to be at least 1');
+    }
+    console.log('✅ Test 6 Passed: Queue status metrics correctly reported.');
+
     console.log('\n🎉 ALL INTEGRATION TESTS PASSED SUCCESSFULLY! 🎉');
   } catch (error: any) {
     console.error('\n❌ Integration verification failed:', error.message);
     process.exitCode = 1;
   } finally {
-    // 6. Clean shutdown
-    server.close(() => {
+    // 6. Clean shutdown with graceful connections closing to prevent hanging processes
+    console.log('🔌 Closing connections and shutting down server...');
+    server.close(async () => {
       console.log('🛑 Server shut down.');
-      prisma.$disconnect().then(() => {
-        process.exit(process.exitCode || 0);
-      });
+      try {
+        await cvSlicerQueue.close();
+        await cloudAiQueue.close();
+        await ttsVoiceQueue.close();
+        await videoRenderQueue.close();
+        await publishingQueue.close();
+        await redisConnection.quit();
+        console.log('🔌 Redis connections closed.');
+      } catch (redisError: any) {
+        console.error('⚠️ Error closing Redis connections:', redisError.message);
+      }
+
+      try {
+        await prisma.$disconnect();
+        console.log('🔌 PostgreSQL connection disconnected.');
+      } catch (dbError: any) {
+        console.error('⚠️ Error disconnecting PostgreSQL:', dbError.message);
+      }
+
+      process.exit(process.exitCode || 0);
     });
   }
 }

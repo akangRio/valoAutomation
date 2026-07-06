@@ -12,6 +12,8 @@
   "dependencies": {
     "express": "^4.19.2",
     "zod": "^3.22.4",
+    "bullmq": "^5.8.0",
+    "ioredis": "^5.4.1",
     "@packages/database": "workspace:*"
   },
   "devDependencies": {
