@@ -5,8 +5,8 @@
   "repository": {},
   "license": "UNLICENSED",
   "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/worker.js",
+  "types": "dist/worker.d.ts",
   "dependencies": {
     "@remotion/cli": "4.0.485",
     "react": "19.2.3",
@@ -33,7 +33,8 @@
     "dev": "remotion studio",
     "build": "tsc && remotion bundle",
     "upgrade": "remotion upgrade",
-    "lint": "eslint src && tsc"
+    "lint": "eslint src && tsc",
+    "start": "ts-node src/worker.ts"
   },
   "sideEffects": [
     "*.css"
