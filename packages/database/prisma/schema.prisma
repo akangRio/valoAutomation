@@ -1,0 +1,108 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum JobStatus {
+  PENDING
+  CV_PARSING
+  CV_COMPLETED
+  CLOUD_ANALYZING
+  CLOUD_COMPLETED
+  TTS_GENERATING
+  TTS_COMPLETED
+  VIDEO_RENDERING
+  VIDEO_COMPLETED
+  PUBLISHING
+  COMPLETED
+  FAILED
+}
+
+enum MusicTheme {
+  HYPE
+  CHILL
+  LOFI
+}
+
+model Job {
+  id                  String       @id @default(uuid())
+  rawVideoPath        String
+  status              JobStatus    @default(PENDING)
+  currentStep         String       @default("INIT")
+  highlightVideoPath  String?
+  keyframesDir        String?
+  renderedVideoPath   String?
+  errorLog            String?      @db.Text
+  retries             Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  // Relations
+  highlights          Highlight[]
+  metadata            VideoMetadata?
+  audioSync           TTSAudioSync?
+  youtubeUpload       YouTubeUpload?
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Highlight {
+  id              String   @id @default(uuid())
+  jobId           String
+  timestampStart  Float
+  timestampEnd    Float
+  killCount       Int
+  confidence      Float
+  createdAt       DateTime @default(now())
+
+  // Relations
+  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+model VideoMetadata {
+  id              String     @id @default(uuid())
+  jobId           String     @unique
+  suggestedTitle  String
+  description     String     @db.Text
+  tags            String[]
+  voiceoverScript String     @db.Text
+  clutchOverlay   String
+  captionColor    String
+  musicTheme      MusicTheme @default(HYPE)
+  createdAt       DateTime   @default(now())
+
+  // Relations
+  job             Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model TTSAudioSync {
+  id                 String   @id @default(uuid())
+  jobId              String   @unique
+  voiceoverAudioPath String
+  timestampsJsonPath String   // Path to WordTimestamp[] JSON file
+  createdAt          DateTime @default(now())
+
+  // Relations
+  job                Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model YouTubeUpload {
+  id             String   @id @default(uuid())
+  jobId          String   @unique
+  youtubeVideoId String
+  publishedAt    DateTime?
+  scheduledFor   DateTime
+  createdAt      DateTime @default(now())
+
+  // Relations
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([youtubeVideoId])
+}
