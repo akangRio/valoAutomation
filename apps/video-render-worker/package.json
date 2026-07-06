@@ -1,0 +1,41 @@
+{
+  "name": "@apps/video-render-worker",
+  "version": "1.0.0",
+  "description": "Remotion video compositor and BullMQ render worker",
+  "repository": {},
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@remotion/cli": "4.0.485",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.485",
+    "@remotion/tailwind-v4": "4.0.485",
+    "tailwindcss": "4.0.0",
+    "bullmq": "^5.8.0",
+    "ioredis": "^5.4.1",
+    "zod": "^3.22.4",
+    "@packages/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.485",
+    "@types/react": "19.2.7",
+    "@types/web": "0.0.166",
+    "@types/node": "^20.11.24",
+    "eslint": "9.19.0",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3",
+    "ts-node": "^10.9.2"
+  },
+  "scripts": {
+    "dev": "remotion studio",
+    "build": "tsc && remotion bundle",
+    "upgrade": "remotion upgrade",
+    "lint": "eslint src && tsc"
+  },
+  "sideEffects": [
+    "*.css"
+  ]
+}
