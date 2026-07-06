@@ -7,6 +7,7 @@ This document defines the detailed, granular technical task board for implementi
 ## Milestone 1: Core Message Broker & API Gateway
 
 ### Task 1.1: Configure Monorepo Scaffolding
+
 - **Objective**: Establish the root monorepo project configurations, TypeScript compiler parameters, and workspace directory links.
 - **Dependencies**: None.
 - **Estimated Complexity**: Low.
@@ -19,6 +20,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 1.2: Implement Prisma PostgreSQL Relational Schema
+
 - **Objective**: Develop the Prisma database package, write relational schema definitions, and deploy migration tables.
 - **Dependencies**: Task 1.1.
 - **Estimated Complexity**: Medium.
@@ -31,6 +33,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 1.3: Implement Express API Gateway and Controllers
+
 - **Objective**: Construct the central Express API Gateway, configure controller routing, and implement Zod validation middleware.
 - **Dependencies**: Task 1.2.
 - **Estimated Complexity**: Medium.
@@ -43,6 +46,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 1.4: Configure Redis and BullMQ Queue Integration
+
 - **Objective**: Connect the API Gateway to local Redis brokers and develop standard task enqueuing interfaces.
 - **Dependencies**: Task 1.3.
 - **Estimated Complexity**: Medium.
@@ -57,6 +61,7 @@ This document defines the detailed, granular technical task board for implementi
 ## Milestone 2: Computer Vision Slicer Worker
 
 ### Task 2.1: Establish CV Slicer Worker and Python Virtual Env
+
 - **Objective**: Establish the BullMQ worker structure and provision local Python virtual environments.
 - **Dependencies**: Task 1.4.
 - **Estimated Complexity**: Low.
@@ -69,6 +74,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 2.2: Implement OpenCV Highlight Detection and Slicing
+
 - **Objective**: Script OpenCV template-matching routines, identify highlight boundaries, and execute clip slicing via local FFmpeg.
 - **Dependencies**: Task 2.1.
 - **Estimated Complexity**: High.
@@ -84,6 +90,7 @@ This document defines the detailed, granular technical task board for implementi
 ## Milestone 3: Multimodal Cloud AI & TTS Sync
 
 ### Task 3.1: Implement Gemini Multimodal AI Worker
+
 - **Objective**: Develop the BullMQ worker that dispatches action keyframes and metadata to Gemini to write commentary scripts and titles.
 - **Dependencies**: Task 2.2.
 - **Estimated Complexity**: Medium.
@@ -97,6 +104,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 3.2: Implement TTS Voice Synchronization Worker
+
 - **Objective**: Synthesise commentary voice tracks and compile exact word boundary durations.
 - **Dependencies**: Task 3.1.
 - **Estimated Complexity**: High.
@@ -112,6 +120,7 @@ This document defines the detailed, granular technical task board for implementi
 ## Milestone 4: Programmatic Remotion Compositor
 
 ### Task 4.1: Configure Remotion Workspace and 9:16 Crop Timelines
+
 - **Objective**: Initialize the Remotion video editing project and develop vertical perspective crops.
 - **Dependencies**: Task 1.1.
 - **Estimated Complexity**: Medium.
@@ -124,6 +133,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 4.2: Implement Synced Subtitle Component and Audio Mixer
+
 - **Objective**: Create animated subtitles that react frame-by-frame to timing JSONs, and mix audio tracks.
 - **Dependencies**: Task 4.1, Task 3.2.
 - **Estimated Complexity**: High.
@@ -136,6 +146,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 4.3: Implement Remotion Render Worker Coordination
+
 - **Objective**: Bind Remotion compiler commands to BullMQ execution events.
 - **Dependencies**: Task 4.2.
 - **Estimated Complexity**: Medium.
@@ -151,6 +162,7 @@ This document defines the detailed, granular technical task board for implementi
 ## Milestone 5: Publisher Worker & Disk Housekeeper
 
 ### Task 5.1: Implement YouTube Publisher Worker
+
 - **Objective**: Develop the YouTube publisher worker utilizing OAuth2 rotating credentials.
 - **Dependencies**: Task 4.3.
 - **Estimated Complexity**: Medium.
@@ -164,6 +176,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 5.2: Implement Local File Housekeeper
+
 - **Objective**: Programmatically sweep local file directories to preserve disk space.
 - **Dependencies**: Task 5.1.
 - **Estimated Complexity**: Low.
@@ -176,6 +189,7 @@ This document defines the detailed, granular technical task board for implementi
 ---
 
 ### Task 5.3: Run End-to-End Platform Integration and Fault-Recovery checks
+
 - **Objective**: Conduct continuous testing cycles, fault injection recoveries, and final liveness validations.
 - **Dependencies**: All previous tasks.
 - **Estimated Complexity**: High.

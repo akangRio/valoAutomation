@@ -9,6 +9,7 @@ This document details the code styling, error handling patterns, structured logg
 All inbound data channels (Express HTTP Requests, BullMQ Jobs, and Env files) must validate schemas prior to logic execution.
 
 ### I. Express Controller Requests (Zod Validation)
+
 Always declare validation schemas for `req.body` and validate them inside a controller middleware.
 
 ```typescript
@@ -49,11 +50,11 @@ const updatedJob = await prisma.$transaction(async (tx) => {
     where: { id: jobId },
     data: { status: 'CV_COMPLETED' },
   });
-  
+
   await tx.highlight.create({
     data: { jobId, timestampStart, timestampEnd, killCount },
   });
-  
+
   return job;
 });
 ```
@@ -72,8 +73,13 @@ import { log } from '@packages/logger';
 const worker = new Worker(
   'cv-slicer-queue',
   async (job: Job) => {
-    log({ level: 'info', service: 'cv-slicer', message: `Processing job ${job.id}`, jobId: job.id });
-    
+    log({
+      level: 'info',
+      service: 'cv-slicer',
+      message: `Processing job ${job.id}`,
+      jobId: job.id,
+    });
+
     try {
       // Execute work logic
       await prisma.job.update({
@@ -89,7 +95,7 @@ const worker = new Worker(
   {
     connection: { host: '127.0.0.1', port: 6379 },
     concurrency: 1, // Restrict renderers/parsers to protect local GPU
-  }
+  },
 );
 ```
 

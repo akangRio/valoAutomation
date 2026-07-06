@@ -7,6 +7,7 @@ This document outlines the PostgreSQL database structure, performance index sele
 ## 1. Database Engine Rationale
 
 We utilize **PostgreSQL** as our transactional record system.
+
 - **Relational Integrity**: Safely manages relationships between captured videos, extracted highlights, generated scripts, and upload audit logs.
 - **Concurrency Support**: Native row-level locking handles rapid concurrent status updates coming from decoupled asynchronous BullMQ queue workers.
 - **Analytical Strength**: Optimizes complex telemetry queries (e.g. video render speeds, failure ratios, channel performance tracking over time).
@@ -148,6 +149,7 @@ To keep the Express API Gateway and BullMQ workers lightning-fast, we apply cust
 ## 4. Connection Pooling Rationale
 
 Since our BullMQ workers act as independent processes, each worker creates its own instance of the database client.
+
 - **PostgreSQL Connection Pool**: Limit client connections using Prisma's connection pool configurations inside the `DATABASE_URL` query parameters:
   ```env
   DATABASE_URL="postgresql://postgres:password@localhost:5432/state_db?connection_limit=5&pool_timeout=10"

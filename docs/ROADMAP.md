@@ -23,6 +23,7 @@ Our engineering path is broken into 5 technical milestones, prioritizing the cre
 ## Detailed Roadmap Phases
 
 ### Phase 1: Core Broker, Database & API Gateway
+
 - **Goal**: Provision development services, construct relational models via Prisma, and set up the Express API Gateway.
 - **Tasks**:
   - Provision local PostgreSQL and Redis servers.
@@ -33,6 +34,7 @@ Our engineering path is broken into 5 technical milestones, prioritizing the cre
 - **Milestone 1 Deliverable**: An active Express API Gateway and local PostgreSQL database where a REST call registers jobs, sets their status to `PENDING` via Prisma, and successfully pushes payload items to Redis.
 
 ### Phase 2: CV Slicer Worker (Computer Vision)
+
 - **Goal**: Integrate the local computer vision pipeline as a dedicated, non-blocking BullMQ worker.
 - **Tasks**:
   - Build the `cv-slicer-worker` structure and connect it to Redis.
@@ -42,6 +44,7 @@ Our engineering path is broken into 5 technical milestones, prioritizing the cre
 - **Milestone 2 Deliverable**: A computer vision processor bound to `cv-slicer-queue` that trims raw videos, extracts keyframe JPEGs, saves assets under `/storage/`, and updates status in PostgreSQL using Prisma.
 
 ### Phase 3: Storyteller Worker (Gemini & TTS Synchronization)
+
 - **Goal**: Develop creative and synthetic voice workers.
 - **Tasks**:
   - Construct `cloud-ai-worker` using `@google/genai` to send keyframes to Gemini.
@@ -51,6 +54,7 @@ Our engineering path is broken into 5 technical milestones, prioritizing the cre
 - **Milestone 3 Deliverable**: Successful pipeline chaining. Completed computer vision runs automatically trigger Cloud AI scripts and generate matched TTS voiceovers with syllable timestamp files.
 
 ### Phase 4: Video Compositor Worker (Remotion Engine)
+
 - **Goal**: Construct programmatic portrait video compositions with animated captions.
 - **Tasks**:
   - Scaffolding the React-based Remotion rendering framework.
@@ -61,6 +65,7 @@ Our engineering path is broken into 5 technical milestones, prioritizing the cre
 - **Milestone 4 Deliverable**: The Remotion worker compiles vertical MP4 files automatically, yielding professional-grade Shorts from raw video segments.
 
 ### Phase 5: Publisher Worker & Deployment Tuning
+
 - **Goal**: Automate YouTube upload profiles, token rotations, and disk cleanup procedures.
 - **Tasks**:
   - Integrate `youtube-publisher-worker` using the official Google API Client.

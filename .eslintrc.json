@@ -2,10 +2,7 @@
   "root": true,
   "parser": "@typescript-eslint/parser",
   "plugins": ["@typescript-eslint"],
-  "extends": [
-    "eslint:recommended",
-    "plugin:@typescript-eslint/recommended"
-  ],
+  "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
   "env": {
     "node": true,
     "es2022": true
@@ -15,11 +12,5 @@
     "@typescript-eslint/no-explicit-any": "warn",
     "no-console": "off"
   },
-  "ignorePatterns": [
-    "dist/",
-    "build/",
-    "node_modules/",
-    "storage/",
-    "**/venv/*"
-  ]
+  "ignorePatterns": ["dist/", "build/", "node_modules/", "storage/", "**/venv/*"]
 }

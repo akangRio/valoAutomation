@@ -12,11 +12,5 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "exclude": [
-    "node_modules",
-    "dist",
-    "build",
-    "storage",
-    "**/venv/*"
-  ]
+  "exclude": ["node_modules", "dist", "build", "storage", "**/venv/*"]
 }

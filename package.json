@@ -4,6 +4,11 @@
   "version": "1.0.0",
   "description": "Enterprise monorepo for Valorant AI Content Automation",
   "packageManager": "pnpm@9.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
