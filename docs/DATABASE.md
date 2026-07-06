@@ -1,145 +1,155 @@
-# Database Specification: Valorant AI Content Automation
+# Database Specifications: Enterprise PostgreSQL & Prisma Model
 
-This document outlines the SQLite database structure, table definitions, indexing strategies, and SQLite performance optimizations for the **Valorant AI Content Automation** local pipeline.
-
----
-
-## 1. Database Architecture & Design
-
-To keep the pipeline 100% self-contained and run on local Windows environments with zero dependency installation, we use a single file-based **SQLite** database (`/packages/database/state.db`).
-
-### Optimizing SQLite for Local Concurrency
-While SQLite is serverless, we can optimize its engine for rapid reading, writing, and locking safety by configuring specific database flags immediately upon connection:
-
-1. **WAL Mode (Write-Ahead Logging)**:
-   - **Command**: `PRAGMA journal_mode = WAL;`
-   - **Justification**: Allows concurrent reads and writes. Prevents database write-locks from blocking orchestrator polls.
-2. **Synchronous Mode**:
-   - **Command**: `PRAGMA synchronous = NORMAL;`
-   - **Justification**: Ensures data safety while reducing disk I/O bottlenecks.
-3. **Busy Timeout**:
-   - **Command**: `PRAGMA busy_timeout = 5000;`
-   - **Justification**: Prevents sudden database lock errors by waiting up to 5 seconds for a lock to clear if multiple services access the file simultaneously.
+This document outlines the PostgreSQL database structure, performance index selections, and the complete, production-ready **Prisma Schema** governing data migrations and relationships.
 
 ---
 
-## 2. Table Schemas
+## 1. Database Engine Rationale
 
-The database contains two main tables: `jobs` (for managing state transition steps) and `highlights` (for tracking isolated multi-kill elements).
-
-```mermaid
-erDiagram
-    jobs ||--o{ highlights : "contains"
-    jobs {
-        TEXT id PK
-        TEXT raw_video_path
-        TEXT status
-        TEXT current_step
-        TEXT highlight_video_path
-        TEXT keyframes_dir
-        TEXT cloud_metadata_json
-        TEXT voiceover_audio_path
-        TEXT subtitle_timestamps_json
-        TEXT rendered_video_path
-        TEXT youtube_video_id
-        TEXT error_log
-        INTEGER retries
-        TEXT created_at
-        TEXT updated_at
-    }
-    highlights {
-        INTEGER id PK
-        TEXT job_id FK
-        REAL timestamp_start
-        REAL timestamp_end
-        INTEGER kill_count
-        REAL confidence
-    }
-```
-
-### Table 1: `jobs`
-Main pipeline coordinator table. Manages files and active statuses.
-
-```sql
-CREATE TABLE IF NOT EXISTS jobs (
-    id TEXT PRIMARY KEY,                       -- UUID v4 or localized unique string
-    raw_video_path TEXT NOT NULL,              -- Absolute path to raw file in /captures/
-    status TEXT NOT NULL DEFAULT 'CAPTURE_DETECTED', -- CAPTURE_DETECTED, CV_PARSING, CV_PARSED, etc.
-    current_step TEXT NOT NULL DEFAULT 'INIT', -- Tracking specific active step
-    highlight_video_path TEXT,                 -- Path to sliced MP4
-    keyframes_dir TEXT,                        -- Path to directory of JPEG keyframe extractions
-    cloud_metadata_json TEXT,                  -- Stringified JSON matching Gemini response schema
-    voiceover_audio_path TEXT,                 -- Path to generated TTS voice MP3
-    subtitle_timestamps_json TEXT,             -- Stringified JSON array of WordTimestamp[]
-    rendered_video_path TEXT,                  -- Path to finished vertical MP4
-    youtube_video_id TEXT,                    -- Video identifier registered on YouTube
-    error_log TEXT,                            -- Diagnostic stack trace on failure
-    retries INTEGER NOT NULL DEFAULT 0,        -- Retry tracking count
-    created_at TEXT NOT NULL,                  -- ISO 8601 string
-    updated_at TEXT NOT NULL                   -- ISO 8601 string
-);
-```
-
-### Table 2: `highlights`
-Sub-table storing granular clips extracted from raw gameplay before synthesis.
-
-```sql
-CREATE TABLE IF NOT EXISTS highlights (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id TEXT NOT NULL,                      -- Foreign key pointing to jobs.id
-    timestamp_start REAL NOT NULL,             -- Slicing start time (seconds)
-    timestamp_end REAL NOT NULL,               -- Slicing end time (seconds)
-    kill_count INTEGER NOT NULL,               -- Total kills detected in this highlight window
-    confidence REAL NOT NULL,                  -- Average OpenCV template matching certainty (0.0 - 1.0)
-    FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
-);
-```
+We utilize **PostgreSQL** as our transactional record system.
+- **Relational Integrity**: Safely manages relationships between captured videos, extracted highlights, generated scripts, and upload audit logs.
+- **Concurrency Support**: Native row-level locking handles rapid concurrent status updates coming from decoupled asynchronous BullMQ queue workers.
+- **Analytical Strength**: Optimizes complex telemetry queries (e.g. video render speeds, failure ratios, channel performance tracking over time).
 
 ---
 
-## 3. Indexing Strategy
+## 2. Prisma Database Model (`schema.prisma`)
 
-To speed up polling queries and garbage cleanup tasks, we apply target indexes on fields involved in filtering:
+Below is the complete, schema definition file. All services use this model via Prisma Client to query the database.
 
-```sql
--- Speed up Orchestrator polls looking for incomplete/active jobs
-CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
--- Speed up cleanup routines sorting old jobs to purge large media files
-CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
+generator client {
+  provider = "prisma-client-js"
+}
 
--- Speed up highlights relational join querying
-CREATE INDEX IF NOT EXISTS idx_highlights_job_id ON highlights(job_id);
-```
+enum JobStatus {
+  PENDING
+  CV_PARSING
+  CV_COMPLETED
+  CLOUD_ANALYZING
+  CLOUD_COMPLETED
+  TTS_GENERATING
+  TTS_COMPLETED
+  VIDEO_RENDERING
+  VIDEO_COMPLETED
+  PUBLISHING
+  COMPLETED
+  FAILED
+}
 
----
+enum MusicTheme {
+  HYPE
+  CHILL
+  LOFI
+}
 
-## 4. Connection Helper Pattern (Node.js)
+model Job {
+  id                  String       @id @default(uuid())
+  rawVideoPath        String
+  status              JobStatus    @default(PENDING)
+  currentStep         String       @default("INIT")
+  highlightVideoPath  String?
+  keyframesDir        String?
+  renderedVideoPath   String?
+  errorLog            String?      @db.Text
+  retries             Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
-When initializing the database package, instantiate the SQLite connection using native bindings with optimization PRAGMAs pre-loaded.
+  // Relations
+  highlights          Highlight[]
+  metadata            VideoMetadata?
+  audioSync           TTSAudioSync?
+  youtubeUpload       YouTubeUpload?
 
-```typescript
-import Database from 'better-sqlite3';
-import { ENV } from './config';
+  @@index([status])
+  @@index([createdAt])
+}
 
-export function initializeDatabase() {
-  const db = new Database(ENV.DB_PATH, { verbose: console.log });
+model Highlight {
+  id              String   @id @default(uuid())
+  jobId           String
+  timestampStart  Float
+  timestampEnd    Float
+  killCount       Int
+  confidence      Float
+  createdAt       DateTime @default(now())
 
-  // Apply performance and safety configurations
-  db.pragma('journal_mode = WAL');
-  db.pragma('synchronous = NORMAL');
-  db.pragma('busy_timeout = 5000');
+  // Relations
+  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
-  // Create tables & indexes
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS jobs (...);
-    CREATE TABLE IF NOT EXISTS highlights (...);
-    CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
-    CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
-    CREATE INDEX IF NOT EXISTS idx_highlights_job_id ON highlights(job_id);
-  `);
+  @@index([jobId])
+}
 
-  return db;
+model VideoMetadata {
+  id              String     @id @default(uuid())
+  jobId           String     @unique
+  suggestedTitle  String
+  description     String     @db.Text
+  tags            String[]
+  voiceoverScript String     @db.Text
+  clutchOverlay   String
+  captionColor    String
+  musicTheme      MusicTheme @default(HYPE)
+  createdAt       DateTime   @default(now())
+
+  // Relations
+  job             Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model TTSAudioSync {
+  id                 String   @id @default(uuid())
+  jobId              String   @unique
+  voiceoverAudioPath String
+  timestampsJsonPath String   // Path to WordTimestamp[] JSON file
+  createdAt          DateTime @default(now())
+
+  // Relations
+  job                Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model YouTubeUpload {
+  id             String   @id @default(uuid())
+  jobId          String   @unique
+  youtubeVideoId String
+  publishedAt    DateTime?
+  scheduledFor   DateTime
+  createdAt      DateTime @default(now())
+
+  // Relations
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([youtubeVideoId])
 }
 ```
-*This initialization script guarantees that any fresh execution of the code auto-creates the database structure with full optimizations pre-applied.*
+
+---
+
+## 3. Performance Optimization & Indexes
+
+To keep the Express API Gateway and BullMQ workers lightning-fast, we apply custom indexes on query filters (automatically compiled by Prisma via `@@index` annotations):
+
+1. **`Job(status)` Index**:
+   - **Justification**: Speeds up poller and admin metrics queries evaluating work-in-progress workloads.
+2. **`Job(createdAt)` Index**:
+   - **Justification**: Essential for cleaning procedures sorting old jobs to delete oversized raw media files.
+3. **`Highlight(jobId)` Index**:
+   - **Justification**: Speeds up relational joins when loading raw gameplay segment listings.
+4. **`YouTubeUpload(youtubeVideoId)` Index**:
+   - **Justification**: Speeds up tracking updates looking up status metrics via the official YouTube Video ID.
+
+---
+
+## 4. Connection Pooling Rationale
+
+Since our BullMQ workers act as independent processes, each worker creates its own instance of the database client.
+- **PostgreSQL Connection Pool**: Limit client connections using Prisma's connection pool configurations inside the `DATABASE_URL` query parameters:
+  ```env
+  DATABASE_URL="postgresql://postgres:password@localhost:5432/state_db?connection_limit=5&pool_timeout=10"
+  ```
+  This restricts connection scaling, preventing the database from running out of socket allocation descriptors during parallel job peaks.

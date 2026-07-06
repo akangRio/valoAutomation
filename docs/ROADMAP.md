@@ -1,83 +1,71 @@
-# Project Roadmap: Valorant AI Content Automation
+# Project Roadmap: Enterprise Edition
 
-This document outlines the step-by-step phased rollout for the **Valorant AI Content Automation** pipeline. It is designed to prioritize early validation of core mechanics before building more complex features, ensuring a functional end-to-end system can be tested as early as possible.
+This document details the development cycles and implementation phases for the **Valorant AI Content Automation** enterprise monorepo, transitioning from local-first scaffolding to a high-throughput, event-driven queue platform.
 
 ---
 
-## Phased Rollout Overview
+## Technical Rollout Strategy
 
-We break down development into 6 core phases, targeting a fully automated, production-ready system in 6-8 weeks of development by AI coding agents.
+Our engineering path is broken into 5 technical milestones, prioritizing the creation of our message brokers and databases before launching resource-heavy rendering workers.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                               DEVELOPMENT PHASES                            │
+│                             ENGINEERING PHASES                              │
 ├──────────────┬──────────────┬──────────────┬──────────────┬─────────────────┤
-│ Phase 1      │ Phase 2      │ Phase 3      │ Phase 4      │ Phase 5 & 6     │
-│ Core &       │ CV Highlight │ Cloud AI &   │ Remotion     │ Orchestration   │
-│ Capture      │ Parsing      │ Voiceover    │ Rendering    │ & Automation    │
-│ (Week 1)     │ (Week 2)     │ (Week 3)     │ (Week 4)     │ (Week 5-6)      │
+│ Phase 1      │ Phase 2      │ Phase 3      │ Phase 4      │ Phase 5         │
+│ Core Broker  │ CV & Slicer  │ AI & Voice   │ Remotion     │ Publisher       │
+│ & Database   │ Worker       │ Synthesis    │ Composition  │ & Automation    │
 └──────────────┴──────────────┴──────────────┴──────────────┴─────────────────┘
 ```
 
 ---
 
-## Detailed Phases
+## Detailed Roadmap Phases
 
-### Phase 1: Core Foundation & Capture Monitor (Week 1)
-**Goal**: Establish the local monorepo, database schema, and directory watcher.
-- [ ] Initialize the Git repository and folder structures (as defined in `FOLDER_STRUCTURE.md`).
-- [ ] Set up the local SQLite database schema and database client using Node.js and `better-sqlite3`.
-- [ ] Implement `capture-monitor` using `chokidar` (Node.js) to watch the raw recordings folder and handle file creation/lock states.
-- [ ] Write integration tests for directory scanning and DB job creation.
-- **Milestone 1**: Dropping an MP4 file into the raw recordings directory automatically creates a row in the SQLite database with `CAPTURE_DETECTED` status.
+### Phase 1: Core Broker, Database & API Gateway
+- **Goal**: Provision development services, construct relational models via Prisma, and set up the Express API Gateway.
+- **Tasks**:
+  - Provision local PostgreSQL and Redis servers.
+  - Compile the monorepo workspace configurations.
+  - Formulate database models inside `packages/database/prisma/schema.prisma`.
+  - Establish Express API controller routing for raw video ingestion and metrics monitoring.
+  - Implement Zod schema validation checks for incoming HTTP requests.
+- **Milestone 1 Deliverable**: An active Express API Gateway and local PostgreSQL database where a REST call registers jobs, sets their status to `PENDING` via Prisma, and successfully pushes payload items to Redis.
 
-### Phase 2: OpenCV Highlight Parser (Week 2)
-**Goal**: Build the local highlight extraction script using Python and OpenCV.
-- [ ] Set up the local Python virtual environment and dependencies (`opencv-python`, `numpy`).
-- [ ] Implement UI template matching in Python to detect:
-  - Game kills (kill icon/skull).
-  - Multi-kills (consecutive kills within 10 seconds).
-  - Round end banners (victory/defeat).
-- [ ] Implement video trimming and slicing using `FFmpeg` or OpenCV to extract high-yield clips (15-45s) around detected highlights.
-- [ ] Write keyframe extractor (capturing 5-10 JPEG images representing peak action frames).
-- **Milestone 2**: Dropping a full-length match recording generates a trimmed `.mp4` highlight file and a folder of JPEG keyframes with timestamps in under 2 minutes.
+### Phase 2: CV Slicer Worker (Computer Vision)
+- **Goal**: Integrate the local computer vision pipeline as a dedicated, non-blocking BullMQ worker.
+- **Tasks**:
+  - Build the `cv-slicer-worker` structure and connect it to Redis.
+  - Port OpenCV templates (Kill Skull assets) and NumPy matrices.
+  - Script Python sub-processes to scan frames, capture coordinate lists, and compile highlight boundaries.
+  - Write trimming routines utilizing local FFmpeg.
+- **Milestone 2 Deliverable**: A computer vision processor bound to `cv-slicer-queue` that trims raw videos, extracts keyframe JPEGs, saves assets under `/storage/`, and updates status in PostgreSQL using Prisma.
 
-### Phase 3: Cloud AI & Voiceover (Week 3)
-**Goal**: Connect to Gemini and generate voiceover audio with synchronized word-timestamps.
-- [ ] Implement `cloud-analyzer` Node.js service:
-  - Initialize the `@google/genai` client.
-  - Send keyframes and gameplay metadata (agent, map, score) with a specialized system prompt.
-  - Validate Gemini's structured JSON output (title, script, descriptions) using `zod`.
-- [ ] Implement `tts-generator` Node.js service:
-  - Integrate with a lightweight TTS engine (e.g., ElevenLabs API or local Edge-TTS).
-  - Generate the voiceover MP3.
-  - Extract exact **word-level timestamps** from the TTS engine output.
-- **Milestone 3**: An input highlight clip produces a structured JSON metadata block, a voiceover MP3 file, and a word-timestamp alignment JSON.
+### Phase 3: Storyteller Worker (Gemini & TTS Synchronization)
+- **Goal**: Develop creative and synthetic voice workers.
+- **Tasks**:
+  - Construct `cloud-ai-worker` using `@google/genai` to send keyframes to Gemini.
+  - Enforce structured Gemini response contracts via prompt-schemas.
+  - Construct `tts-voice-worker` using Microsoft Edge-TTS or ElevenLabs.
+  - Extract word boundaries and sync timestamps from voice MP3 stream events.
+- **Milestone 3 Deliverable**: Successful pipeline chaining. Completed computer vision runs automatically trigger Cloud AI scripts and generate matched TTS voiceovers with syllable timestamp files.
 
-### Phase 4: Remotion Video Rendering (Week 4)
-**Goal**: Build the vertical React-based Remotion video template and local renderer.
-- [ ] Initialize the Remotion project in `/apps/video-renderer/`.
-- [ ] Implement vertical cropping logic (9:16 aspect ratio), centering on the player crosshair.
-- [ ] Implement dynamic gameplay UI overlays (kill feed, ability bar) scaled and placed in the margins.
-- [ ] Implement high-impact, word-by-word animated subtitles using the TTS timestamp JSON.
-- [ ] Implement audio mixing: original game audio (lowered/ducked) + voiceover MP3 + royalty-free background music.
-- [ ] Automate rendering using Remotion CLI.
-- **Milestone 4**: Calling the Remotion CLI with local assets yields a premium vertical Short video (`output.mp4`) with synchronized music, voice, and animated captions.
+### Phase 4: Video Compositor Worker (Remotion Engine)
+- **Goal**: Construct programmatic portrait video compositions with animated captions.
+- **Tasks**:
+  - Scaffolding the React-based Remotion rendering framework.
+  - Implement portrait cropping centered on players' crosshairs.
+  - Build dynamic caption overlay components reacting frame-by-frame to syllable timestamps.
+  - Establish dynamic audio-mixing rules, lowering background music during vocal peaks.
+  - Restrict worker concurrency strictly to `1` to prevent GPU locks.
+- **Milestone 4 Deliverable**: The Remotion worker compiles vertical MP4 files automatically, yielding professional-grade Shorts from raw video segments.
 
-### Phase 5: SQLite Orchestrator & State Machine (Week 5)
-**Goal**: Glue all individual services together into a single automated pipeline.
-- [ ] Implement the core `orchestrator` service in Node.js.
-- [ ] Build the polling loop that monitors the database for pending jobs.
-- [ ] Wire up service execution (spawning child processes or API calls for each phase).
-- [ ] Implement robust retry mechanisms, job timeouts, and database error logging.
-- [ ] Implement an automated disk-cleanup routine that deletes raw video recordings and temporary assets older than 5 days.
-- **Milestone 5**: A raw video dropped in `/captures/` automatically transitions through parsing, analysis, audio generation, and rendering, producing a finished `output.mp4` ready for upload.
-
-### Phase 6: YouTube Publisher & Production Tuning (Week 6)
-**Goal**: Safe publishing automation and continuous pipeline stability.
-- [ ] Implement `youtube-publisher` using the official Google API Client.
-- [ ] Build safe local OAuth2 token storage and auto-rotation scripts on Windows.
-- [ ] Configure the schedule logic (e.g., daily uploads at 10:00 AM).
-- [ ] Write system integration and liveness tests.
-- [ ] Implement local monitoring scripts (optional: Discord Webhook notifications for pipeline success/failure).
-- **Milestone 6**: End-to-end, zero-click automation. A Valorant clip captured on Windows is processed, rendered, and scheduled on the YouTube channel as a Short, with progress notifications delivered via Webhook.
+### Phase 5: Publisher Worker & Deployment Tuning
+- **Goal**: Automate YouTube upload profiles, token rotations, and disk cleanup procedures.
+- **Tasks**:
+  - Integrate `youtube-publisher-worker` using the official Google API Client.
+  - Script command-line OAuth authorization helpers for secure token storage.
+  - Configure daily scheduling logic based on database queue profiles.
+  - Write file-system cleanup hooks to purge raw and temporary clips.
+  - Run continuous, end-to-end integration tests over 72-hour loops.
+- **Milestone 5 Deliverable**: Play a game, hit OBS hotkeys, and see your play parsed, analyzed, voiced, styled, rendered, scheduled to YouTube, and locally cleaned up with zero manual intervention.

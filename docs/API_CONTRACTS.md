@@ -1,148 +1,152 @@
-# API Contracts: Valorant AI Content Automation
+# API Contracts & Event Payload Schemas: Enterprise Edition
 
-This document outlines the strict API payloads, JSON structures, and parameter schemas used to communicate between isolated services. Adhering to these contracts ensures that AI agents can build and update services independently.
+This document contains structural contract definitions, REST API endpoint schemas, and BullMQ event parameters. These contracts are the single source of truth for all service boundaries.
 
 ---
 
-## 1. Gemini Multimodal Analysis Contract
+## 1. REST API Endpoints (Express API Gateway)
 
-This contract defines the structured JSON output returned by the **Gemini 1.5 Flash API** to the `cloud-analyzer` service. We enforce this exact layout via Gemini's native support for JSON Schema (`responseSchema`).
+### I. Ingest New Capture
+- **Endpoint**: `POST /api/v1/jobs`
+- **Request Body (JSON)**:
+  ```json
+  {
+    "rawVideoPath": "C:/Videos/ValorantCaptures/clutch_bind_0706.mp4"
+  }
+  ```
+- **Success Response (202 Accepted)**:
+  ```json
+  {
+    "status": "success",
+    "message": "Capture registration accepted",
+    "data": {
+      "jobId": "job_01hdwpqz...",
+      "status": "PENDING",
+      "createdAt": "2026-07-06T09:00:10.155Z"
+    }
+  }
+  ```
+
+### II. Get Job Status
+- **Endpoint**: `GET /api/v1/jobs/:id`
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "success",
+    "data": {
+      "id": "job_01hdwpqz...",
+      "status": "VIDEO_RENDERED",
+      "currentStep": "RENDERING",
+      "highlightPath": "C:/storage/highlights/clip_01hdwpqz.mp4",
+      "suggestedTitle": "Insane 1v4 Jett Operator Clutch! #Shorts",
+      "renderedVideoPath": "C:/storage/output/final_01hdwpqz.mp4",
+      "errorLog": null,
+      "updatedAt": "2026-07-06T09:03:45.000Z"
+    }
+  }
+  ```
+
+---
+
+## 2. BullMQ Queue Job Payloads
+
+These TypeScript schemas define the payloads transmitted through the Redis event broker.
 
 ```typescript
-// TypeScript schema interface representing Gemini's response
-interface GeminiAnalysisResponse {
-  videoMetadata: {
-    suggestedTitle: string;        // Catchy, click-optimized title (including #Shorts)
-    description: string;           // Keyword-rich description
-    tags: string[];                // Array of YouTube tags for indexing
-    hashtags: string[];            // Relevant hashtags (e.g., ["#shorts", "#valorant"])
+// Queue Name: cv-slicer-queue
+interface CVSlicerJobPayload {
+  jobId: string;
+  rawVideoPath: string;
+}
+
+// Queue Name: cloud-ai-queue
+interface CloudAIJobPayload {
+  jobId: string;
+  keyframesDir: string;
+  metadata: {
+    mapName?: string;
+    killsCount?: number;
   };
-  creativeDirection: {
-    voiceoverScript: string;       // Under 130 words voiceover commentary script
-    captionStyle: {
-      primaryColor: string;        // Suggested hex color for high-impact subtitles (e.g., "#FFDE59")
-      emphasisStyle: 'bounce' | 'shake' | 'zoom'; // Subtitle transition/animation cue
-    };
-    bgMusicTheme: 'hype' | 'chill' | 'lofi'; // Background music track style
+}
+
+// Queue Name: tts-voice-queue
+interface TTSVoiceJobPayload {
+  jobId: string;
+  scriptText: string;
+}
+
+// Queue Name: video-render-queue
+interface VideoRenderJobPayload {
+  jobId: string;
+  highlightVideoPath: string;
+  voiceoverAudioPath: string;
+  wordTimestampsPath: string;
+  visualMetadata: {
+    agent: string;
+    captionColor: string;
+    clutchMomentDescription: string;
   };
-  visualOverlays: {
-    agentHighlight: string;        // Agent played (e.g., "Jett")
-    clutchMomentDescription: string; // Dynamic overlay text (e.g., "UNREAL 1v4 CLUTCH!")
-  };
+}
+
+// Queue Name: publishing-queue
+interface PublishingJobPayload {
+  jobId: string;
+  renderedVideoPath: string;
+  suggestedTitle: string;
+  description: string;
+  tags: string[];
 }
 ```
 
-### JSON Schema configuration passed to Gemini API:
+---
+
+## 3. Gemini Structured Multimodal Response Schema
+
+When our `Cloud AI Worker` communicates with the **Gemini 1.5 Flash API**, it enforces the following exact JSON structure using Google AI's `responseSchema` parameters.
+
 ```json
 {
   "type": "OBJECT",
   "properties": {
-    "videoMetadata": {
+    "suggestedTitle": { "type": "STRING", "description": "Highly engaging, SEO optimized Title containing #Shorts" },
+    "description": { "type": "STRING", "description": "Rich description containing relevant hashtags" },
+    "tags": { "type": "ARRAY", "items": { "type": "STRING" } },
+    "voiceoverScript": { "type": "STRING", "description": "High-impact narrative voice commentary under 130 words" },
+    "visualDirection": {
       "type": "OBJECT",
       "properties": {
-        "suggestedTitle": { "type": "STRING" },
-        "description": { "type": "STRING" },
-        "tags": { "type": "ARRAY", "items": { "type": "STRING" } },
-        "hashtags": { "type": "ARRAY", "items": { "type": "STRING" } }
+        "clutchDescription": { "type": "STRING", "description": "Floating overlay caption (e.g., UNREAL 4K DEFENSE)" },
+        "captionColor": { "type": "STRING", "description": "Hex color code for subtitle highlights (e.g., #FFD700)" }
       },
-      "required": ["suggestedTitle", "description", "tags", "hashtags"]
-    },
-    "creativeDirection": {
-      "type": "OBJECT",
-      "properties": {
-        "voiceoverScript": { "type": "STRING" },
-        "captionStyle": {
-          "type": "OBJECT",
-          "properties": {
-            "primaryColor": { "type": "STRING" },
-            "emphasisStyle": { "type": "STRING", "enum": ["bounce", "shake", "zoom"] }
-          },
-          "required": ["primaryColor", "emphasisStyle"]
-        },
-        "bgMusicTheme": { "type": "STRING", "enum": ["hype", "chill", "lofi"] }
-      },
-      "required": ["voiceoverScript", "captionStyle", "bgMusicTheme"]
-    },
-    "visualOverlays": {
-      "type": "OBJECT",
-      "properties": {
-        "agentHighlight": { "type": "STRING" },
-        "clutchMomentDescription": { "type": "STRING" }
-      },
-      "required": ["agentHighlight", "clutchMomentDescription"]
+      "required": ["clutchDescription", "captionColor"]
     }
   },
-  "required": ["videoMetadata", "creativeDirection", "visualOverlays"]
+  "required": ["suggestedTitle", "description", "tags", "voiceoverScript", "visualDirection"]
 }
 ```
 
 ---
 
-## 2. TTS Word Timestamp Sync Contract
+## 4. TTS Word Boundaries Synchronization
 
-This contract defines the format of the word timing array generated by the `tts-generator` service, consumed directly by **Remotion** to synchronize word-by-word subtitle rendering.
+This schema governs the subtitle timing file generated by the `TTS Voice Worker`, allowing Remotion to render frame-accurate animated captions.
 
 ```typescript
-// Word Boundary structure
 interface WordTimestamp {
-  word: string;        // The exact word spoken
-  startMs: number;     // Milliseconds from the audio start where the word begins
-  endMs: number;       // Milliseconds from the audio start where the word ends
+  word: string;        // Spoken word token
+  startMs: number;     // Start timing offset (milliseconds)
+  endMs: number;       // End timing offset (milliseconds)
 }
 
-// Sample JSON array saved in DB or local JSON asset
-type WordTimestampsArray = WordTimestamp[];
+type SubtitleTimingData = WordTimestamp[];
 ```
-
-### Sample Payload:
+*Example Timing Block:*
 ```json
 [
-  { "word": "Incredible", "startMs": 120, "endMs": 620 },
-  { "word": "operator", "startMs": 650, "endMs": 1100 },
-  { "word": "shot", "startMs": 1150, "endMs": 1400 },
-  { "word": "by", "startMs": 1410, "endMs": 1550 },
-  { "word": "this", "startMs": 1560, "endMs": 1720 },
-  { "word": "Jett!", "startMs": 1750, "endMs": 2200 }
+  { "word": "No", "startMs": 50, "endMs": 150 },
+  { "word": "way", "startMs": 180, "endMs": 400 },
+  { "word": "he", "startMs": 420, "endMs": 600 },
+  { "word": "hit", "startMs": 620, "endMs": 850 },
+  { "word": "that!", "startMs": 900, "endMs": 1300 }
 ]
 ```
-
----
-
-## 3. Remotion CLI Render Props Contract
-
-When the `orchestrator` spawns the Remotion video-rendering engine, it passes input parameters as a **serialized JSON string** via the `--props` CLI argument.
-
-### Remotion Input Props Type:
-```typescript
-interface RemotionRenderProps {
-  jobId: string;                   // Local Job ID
-  highlightVideoPath: string;      // Absolute local path to trimmed game clip
-  voiceoverAudioPath: string;      // Absolute local path to generated TTS MP3
-  wordTimestamps: WordTimestamp[]; // Array of subtitle timings (from TTS Sync)
-  primaryColor: string;            // Primary hex color code for captions
-  emphasisStyle: 'bounce' | 'shake' | 'zoom';
-  agentHighlight: string;          // Agent name for UI graphic overlays
-  clutchDescription: string;       // Floating text caption overlay
-  bgMusicPath: string;             // Absolute local path to background music
-}
-```
-
-### Remotion Invocation Shell Command example:
-```bash
-npx remotion render src/index.ts ValorantShort output.mp4 --props="{\"jobId\":\"123\", \"highlightVideoPath\":\"C:/storage/highlights/123.mp4\", ...}"
-```
-
----
-
-## 4. YouTube OAuth Local Contract
-
-Since this system executes locally, storing client credentials securely is paramount. The YouTube publisher uses a locally cached JSON credential structure to rotating access tokens.
-
-```json
-{
-  "client_id": "CLIENT_ID_FROM_GOOGLE_CONSOLE.apps.googleusercontent.com",
-  "client_secret": "CLIENT_SECRET_FROM_GOOGLE_CONSOLE",
-  "refresh_token": "SECURE_OFFLINE_REFRESH_TOKEN_OBTAINED_ONCE"
-}
-```
-*Note: The access token is fetched programmatically during runtime and never hardcoded.*

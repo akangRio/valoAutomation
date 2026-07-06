@@ -1,86 +1,86 @@
-# Folder Structure: Valorant AI Content Automation
+# Monorepo Workspace Directory Structure: Enterprise Edition
 
-This document outlines the organization and directory layouts of the **Valorant AI Content Automation** monorepo workspace.
+This document describes the organization of our TypeScript-based monorepo, detailing where independent BullMQ workers, packages, API servers, and configurations are stored.
 
 ---
 
-## Workspace Monorepo Layout
-
-The repository is structured as a modular monorepo to separate independent services, shared packages, build configurations, and pipeline documentation.
+## Complete Workspace Map
 
 ```
 / (workspace root)
 │
-├── .github/                       # GitHub Actions CI/CD workflows
+├── .github/                       # GitHub workflow automated runners
+│   └── workflows/
+│       └── ci.yml                 # Run Vitest testing suites & Prisma schema validation
 │
-├── apps/                          # Independent executing applications
-│   ├── capture-monitor/           # watches captures/ and inserts SQLite jobs (Node.js)
-│   ├── cv-parser/                 # Python script to analyze highlights & extract keyframes
+├── apps/                          # Core executing platforms
+│   ├── api-gateway/               # Express.js HTTP Server managing Prisma & BullMQ triggers
 │   │   ├── src/
-│   │   │   ├── parser.py          # OpenCV core detection script
-│   │   │   └── templates/         # Kill skull/scoreboard overlay image templates for matching
-│   │   ├── requirements.txt       # Python dependencies
-│   │   └── venv/                  # Local Python virtual environment (ignored in git)
-│   │
-│   ├── cloud-analyzer/            # Node.js service connecting to Gemini
-│   ├── tts-generator/             # Node.js service for voiceover & word timestamp sync
-│   ├── video-renderer/            # React/Remotion vertical video template and compile CLI
-│   │   ├── src/
-│   │   │   ├── index.ts           # Remotion root registration
-│   │   │   ├── Composition.tsx    # Core composition layout (9:16 layout)
-│   │   │   └── Subtitles.tsx      # Word-by-word animated caption component
-│   │   ├── public/                # Static assets (fonts, sound effects, background music)
+│   │   │   ├── controllers/       # Controller routers
+│   │   │   ├── middleware/        # Request schema validation (Zod)
+│   │   │   └── app.ts             # Gateway Express bootstrap
 │   │   └── package.json
 │   │
-│   ├── youtube-publisher/         # Node.js YouTube OAuth Data API v3 uploader
-│   └── orchestrator/              # Master Node.js job orchestrator & DB poller
+│   ├── capture-monitor/           # Non-blocking filesystem observer
+│   │   ├── src/
+│   │   │   └── monitor.ts         # chokidar directory watcher
+│   │   └── package.json
+│   │
+│   ├── cv-slicer-worker/          # BullMQ worker executing computer vision trimming
+│   │   ├── src/
+│   │   │   ├── worker.ts          # BullMQ processor
+│   │   │   └── scripts/           # Python OpenCV files
+│   │   └── package.json
+│   │
+│   ├── cloud-ai-worker/           # BullMQ worker integrating Cloud Vision & Gemini API
+│   ├── tts-voice-worker/          # BullMQ worker synthesising commentary track
+│   ├── video-render-worker/       # BullMQ worker executing Remotion compilations
+│   │   ├── src/
+│   │   │   ├── index.ts           # Remotion entrypoint
+│   │   │   └── Composition.tsx    # React video structure
+│   │   └── package.json
+│   │
+│   └── youtube-publisher-worker/  # BullMQ worker handling OAuth video uploads
 │
-├── packages/                      # Shared libraries (internal imports)
-│   ├── database/                  # SQLite clients and schema migration definitions
-│   └── logger/                    # Shared structured JSON logger utility
+├── packages/                      # Internal shared workspace packages
+│   ├── database/                  # Prisma Client provider & migration schema files
+│   │   ├── prisma/
+│   │   │   ├── schema.prisma      # Unified database models
+│   │   │   └── migrations/        # Safe SQL migration scripts
+│   │   ├── src/
+│   │   │   └── client.ts          # Shared Prisma instance
+│   │   └── package.json
+│   │
+│   └── logger/                    # Standardized structured JSON logger module
 │
-├── docs/                          # Architecture & design specifications (Source of Truth)
-│   ├── README.md
-│   ├── ARCHITECTURE.md
-│   ├── SERVICES.md
-│   ├── TECH_STACK.md
-│   ├── CODING_STANDARDS.md
-│   └── ... (this file & other specs)
+├── prompts/                       # Multimodal Gemini instruction sheets
+│   └── gemini-visual-v1.md
 │
-├── scripts/                       # Developer utility scripts
-│   ├── setup.bat                  # Local Windows developer environmental configuration
-│   ├── test-pipeline.sh           # Run a local dry-run end-to-end integration test
-│   └── auth-youtube.js            # Run local CLI flow to obtain the refresh token
+├── infrastructure/                # Deployment configurations
+│   ├── local/                     # Local Redis/Postgres services bat setup configs
+│   └── pm2/                       # PM2 process managers configuration file (ecosystem.config.js)
 │
-├── storage/                       # Local media storage directory (ignored in git)
-│   ├── captures/                  # Incoming raw OBS/Shadowplay gameplay captures
-│   ├── highlights/                # OpenCV parsed 15-45s clip segments
-│   ├── keyframes/                 # Extracted highlight climax JPEG frames for Gemini
-│   ├── temp_audio/                # Synthesized TTS MP3 files
-│   └── output/                    # Final rendered vertical MP4 Shorts
+├── scripts/                       # Local helper scripts
+│   ├── setup-windows.bat          # Install Node and local development services
+│   └── auth-google.ts             # Command-line utility to generate local OAuth refresh tokens
 │
-├── .env.example                   # Baseline configuration templates (secrets must be left empty)
-├── .gitignore                     # Enforces storage/ and venv/ exclusion
-├── package.json                   # Root package.json managing workspace workspaces
-└── tsconfig.json                  # Root TypeScript shared compilations
+├── storage/                       # Local media pipeline directory (Git-ignored)
+│   ├── captures/                  # Destination for raw recordings
+│   ├── highlights/                # Trimmed gameplay segments
+│   ├── keyframes/                 # Extracted climax JPEGs for Gemini
+│   ├── temp_audio/                # Synthesised MP3 tracks
+│   └── output/                    # Compiled vertical MP4 clips
+│
+├── AGENTS.md                      # Operational guidelines and guardrails for AI coding agents
+├── README.md                      # High-level monorepo index
+├── package.json                   # Monorepo configuration managing yarn/pnpm/npm workspaces
+└── tsconfig.json                  # Parent TypeScript configuration compilation guidelines
 ```
 
 ---
 
-## Key Directories Explained
+## Directory Guardrails
 
-### 1. `/storage/`
-- **Crucial**: This folder stores heavy media assets. It is completely ignored by Git to avoid repository bloating.
-- Subdirectories:
-  - `/storage/captures/`: The destination folder where the user's screen recorder (OBS) saves raw clips.
-  - `/storage/highlights/`: Where trimmed video highlight segments are output by the CV parser.
-  - `/storage/keyframes/`: Holds the lightweight JPEG frame extracts used to fuel Gemini multimodal prompts.
-  - `/storage/output/`: The final, high-definition rendered MP4s waiting for YouTube publication.
-
-### 2. `/packages/`
-- Holds common code blocks that multiple Node.js applications use (e.g., standard SQL queries, standardized logger formatting, schema definitions).
-- Kept in `/packages/` to adhere to DRY (Don't Repeat Yourself) principles without violating process boundaries, as these are imported as libraries during build-time.
-
-### 3. `/scripts/`
-- Contains execution files for human developers and local administrative tasks.
-- `auth-youtube.js`: A CLI prompt utility that launches a local browser interface, handles Google OAuth login, retrieves the API refresh token, and dumps it into the local `.env` file securely.
+1. **The `/storage/` Rule**: Large video files must never be placed inside application packages. All clips must be processed using references pointing to the absolute path under the `/storage/` directory.
+2. **The Shared `/packages/` Boundary**: Shared libraries (like `packages/database` housing Prisma) must never compile execution engines. They provide typesafe clients or logging decorators to be imported by the executing applications during build-time.
+3. **No Direct Inter-App Imports**: Applications located under `apps/` must never reference or import code from another application directly. All cross-app relationships are coordinated via BullMQ messaging payloads or Express Gateway webhooks.

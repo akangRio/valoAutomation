@@ -1,144 +1,124 @@
-# Coding Standards: Valorant AI Content Automation
+# Coding Standards & Guidelines: Enterprise Edition
 
-This document defines the strict code style, validation schemas, error handling patterns, structured logging, and testing guidelines. Every AI coding agent and human developer must maintain these standards for TypeScript (Node.js/React) and Python.
+This document details the code styling, error handling patterns, structured logging layouts, and testing criteria required across our TypeScript-based monorepo workspace.
 
 ---
 
-## 1. Environment and Schema Validation
+## 1. Request Schema & Configuration Validation
 
-Every service must validate its configuration and environment variables at startup. Hard failures are preferred over silent failures with default fallbacks.
+All inbound data channels (Express HTTP Requests, BullMQ Jobs, and Env files) must validate schemas prior to logic execution.
 
-### I. TypeScript Validation (using Zod)
-Every Node.js application must declare a `config.ts` or `env.ts` file that parses and validates `process.env`.
+### I. Express Controller Requests (Zod Validation)
+Always declare validation schemas for `req.body` and validate them inside a controller middleware.
 
 ```typescript
+import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import dotenv from 'dotenv';
 
-dotenv.config();
-
-const envSchema = z.object({
-  DB_PATH: z.string().default('./db/state.db'),
-  CAPTURES_DIR: z.string(),
-  GEMINI_API_KEY: z.string().min(10, 'Gemini API key is required'),
-  YT_PUBLISH_HOUR: z.coerce.number().min(0).max(23).default(10),
+const createJobSchema = z.object({
+  rawVideoPath: z.string().min(5, 'Invalid video path length'),
 });
 
-export const ENV = envSchema.parse(process.env);
-```
-
-### II. Python Validation (using `os.environ` fallback)
-Every Python script must validate environmental dependencies before performing work.
-
-```python
-import os
-import sys
-
-def validate_environment():
-    required_vars = ["CV_CONFIDENCE_THRESHOLD", "OUTPUT_DIR"]
-    missing = [var for var in required_vars if not os.getenv(var)]
-    if missing:
-        print(f"CRITICAL ERROR: Missing environment variables: {', '.join(missing)}", file=sys.stderr)
-        sys.exit(1)
+export const validateCreateJob = (req: Request, res: Response, next: NextFunction) => {
+  const result = createJobSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ status: 'error', errors: result.error.errors });
+  }
+  req.body = result.data;
+  next();
+};
 ```
 
 ---
 
-## 2. Structured Logging
+## 2. Prisma Database Query Standards
 
-To make troubleshooting easy, all stdout/stderr output must use structured JSON logging. This allows the Orchestrator to parse error details and save them to the database.
+- **Use Prisma Client Exclusively**: Avoid raw database queries. Use Prisma's safe, auto-generated query interface.
+- **Connection Isolation**: Always import the shared Prisma instance rather than creating new clients in individual modules.
 
-### I. TypeScript Logging Standard
 ```typescript
-interface LogPayload {
-  timestamp: string;
-  level: 'info' | 'warn' | 'error' | 'debug';
-  service: string;
-  message: string;
-  jobId?: string;
-  error?: {
-    message: string;
-    stack?: string;
-  };
-  metadata?: Record<string, any>;
-}
-
-export function log(payload: Omit<LogPayload, 'timestamp'>) {
-  const completeLog: LogPayload = {
-    timestamp: new Date().toISOString(),
-    ...payload,
-  };
-  console.log(JSON.stringify(completeLog));
-}
+import { PrismaClient } from '@prisma/client';
+export const prisma = new PrismaClient();
 ```
 
-### II. Python Logging Standard
-```python
-import json
-from datetime import datetime
+- **Clean Transaction Patterns**: Use Prisma's interactive transaction APIs (`$transaction`) when modifying multiple relational schemas.
 
-def log_structured(level, service, message, job_id=None, metadata=None, error=None):
-    log_payload = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "level": level,
-        "service": service,
-        "message": message,
-        "jobId": job_id,
-        "metadata": metadata or {},
-    }
-    if error:
-        log_payload["error"] = {
-            "message": str(error),
-        }
-    print(json.dumps(log_payload))
+```typescript
+const updatedJob = await prisma.$transaction(async (tx) => {
+  const job = await tx.job.update({
+    where: { id: jobId },
+    data: { status: 'CV_COMPLETED' },
+  });
+  
+  await tx.highlight.create({
+    data: { jobId, timestampStart, timestampEnd, killCount },
+  });
+  
+  return job;
+});
 ```
 
 ---
 
-## 3. Robust Error Handling
+## 3. BullMQ Worker Patterns
 
-- **Never Swallow Errors**: If a database query fails or a file cannot be read, do not use an empty catch block.
-- **Fail the Job Gracefully**: When an error occurs in an active job pipeline, caught exceptions must be captured, formatted, and written back to the SQLite `jobs` table `error_log` field, and the status updated to `FAILED`.
+Every pipeline worker must follow a consistent, non-blocking asynchronous execution layout:
 
-### Node.js Child Process Execution Pattern:
 ```typescript
-import { exec } from 'child_process';
-import { promisify } from 'util';
-const execAsync = promisify(exec);
+import { Worker, Job } from 'bullmq';
+import { prisma } from '@packages/database';
+import { log } from '@packages/logger';
 
-async function runService(command: string, jobId: string) {
-  try {
-    const { stdout, stderr } = await execAsync(command);
-    if (stderr) {
-      log({ level: 'warn', service: 'orchestrator', message: `Stderr output from: ${command}`, jobId, metadata: { stderr } });
+const worker = new Worker(
+  'cv-slicer-queue',
+  async (job: Job) => {
+    log({ level: 'info', service: 'cv-slicer', message: `Processing job ${job.id}`, jobId: job.id });
+    
+    try {
+      // Execute work logic
+      await prisma.job.update({
+        where: { id: job.id },
+        data: { status: 'CV_PARSED' },
+      });
+    } catch (error: any) {
+      log({ level: 'error', service: 'cv-slicer', message: `Worker crash`, error });
+      // Bubble error up to allow BullMQ to execute retry policies
+      throw error;
     }
-    return stdout;
-  } catch (error: any) {
-    log({
-      level: 'error',
-      service: 'orchestrator',
-      message: `Failed execution: ${command}`,
-      jobId,
-      error: { message: error.message, stack: error.stack }
-    });
-    // Update DB job status to FAILED and write error log
-    await db.run(
-      'UPDATE jobs SET status = "FAILED", error_log = ?, updated_at = ? WHERE id = ?',
-      [error.message, new Date().toISOString(), jobId]
-    );
-    throw error;
+  },
+  {
+    connection: { host: '127.0.0.1', port: 6379 },
+    concurrency: 1, // Restrict renderers/parsers to protect local GPU
+  }
+);
+```
+
+---
+
+## 4. Structured JSON Logging
+
+No plain `console.log()` statements. All loggers must output standardized, stringified JSON strings to facilitate orchestrator parsing and log collection tools.
+
+```json
+{
+  "timestamp": "2026-07-06T09:00:00.000Z",
+  "level": "error",
+  "service": "video-renderer",
+  "message": "FFmpeg thread compiler failed with exit code 1",
+  "jobId": "job-12345",
+  "error": {
+    "message": "FFmpeg process failed",
+    "stack": "Error: FFmpeg process failed\n at video-renderer..."
   }
 }
 ```
 
 ---
 
-## 4. Testing Requirements
+## 5. Testing Requirements
 
 1. **Unit Testing**:
-   - TypeScript: Use **Vitest** for quick unit tests of state transitions and config parsers.
-   - Python: Use **PyTest** to validate that template-matching functions accurately detect UI assets in sample frames.
-2. **Mocking External APIs**:
-   - Never run live Gemini API calls, ElevenLabs TTS audio generation, or YouTube uploads inside unit tests. Use mocks to simulate exact payload contract structures.
-3. **Integration Testing**:
-   - Provide helper scripts in `/scripts/` to run "dry runs" using short test-video assets, skipping the cloud AI/TTS/YouTube stages by supplying mock local media instead.
+   - Framework: **Vitest** for extreme execution speed and native ESM compatibility.
+   - Standard: Create mock instances of Prisma Client and Redis/BullMQ connections when writing unit tests. Never connect to production databases or execute live Gemini API calls in unit tests.
+2. **Integration Testing**:
+   - Build dry-run verification setups that feed pre-trimmed test videos directly into the Remotion renderer, bypassing live network dependencies (Gemini, ElevenLabs, YouTube) while verifying rendering output correctly.

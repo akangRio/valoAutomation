@@ -1,72 +1,79 @@
-# Tech Stack Decisiveness: Valorant AI Content Automation
+# Technology Stack Selection & Rationale: Enterprise Edition
 
-This document outlines and justifies the technologies selected for the **Valorant AI Content Automation** pipeline. Every tool is selected to maximize reliability on Windows, minimize cloud runtime costs, and be easily coded/maintained by AI agents.
-
----
-
-## 1. Primary Runtimes
-
-### Node.js (v20+ / TypeScript)
-- **Use Case**: Orchestrator, Capture Monitor, Cloud AI Interface, TTS Sync, YouTube Publisher, and Video Renderer.
-- **Justification**:
-  - Remotion is native to React and Node.js. Running the orchestrator in Node.js avoids inter-process boundaries when preparing assets for video rendering.
-  - TypeScript provides strong typing and schema-validation (Zod), which prevents AI agents from making integration or contract errors.
-  - Node's standard file system, stream, and child-process modules are highly performant and stable on Windows.
-
-### Python (v3.10+)
-- **Use Case**: Computer Vision Highlight Parser.
-- **Justification**:
-  - Python is the undisputed industry standard for computer vision. OpenCV (`opencv-python`) and NumPy are robust, highly optimized C++ wrappers that can analyze video frames extremely fast.
-  - Isolating the computer vision stage in a Python script keeps memory management self-contained. Once the script trims the clip and exits, all memory allocated by OpenCV is cleanly reclaimed by the OS, preventing memory leaks on the gaming PC.
+This document outlines the professional-grade software stack selected for the **Valorant AI Content Automation** platform, detailing technical decisions, architectural justifications, and local/cloud performance trade-offs.
 
 ---
 
-## 2. Databases & Queues
+## 1. Core Language & Frameworks
 
-### SQLite (via `better-sqlite3` in Node.js)
-- **Use Case**: Core state database, job coordinator, and orchestration log.
+### TypeScript (v5+)
+- **Use Case**: Language of choice across the entire monorepo workspace.
 - **Justification**:
-  - No external service dependency. SQLite runs inside a single file (`state.db`) in the workspace folder. No installation, zero-configuration.
-  - Supports transactional locks (`IMMEDIATE` transactions) which prevent state-race conditions.
-  - High performance: Using WAL (Write-Ahead Logging) mode and `better-sqlite3` (synchronous native C++ bindings for Node.js) allows thousands of transactions per second on a standard SSD with negligible CPU overhead.
+  - Eliminates integration errors among distinct services.
+  - Ensures runtime robustness through compile-time type validation.
+  - Composes well with modern IDE auto-completions, enhancing developer and AI agent velocity.
+
+### Express.js (v4+)
+- **Use Case**: REST API Gateway and management portal routing.
+- **Justification**:
+  - High performance, minimal overhead, and extremely mature middleware ecosystem.
+  - Standardized endpoint management for job state polling, webhooks, and manual pipeline overrides.
 
 ---
 
-## 3. Video Composition & Rendering
+## 2. Database & ORM Layer
 
-### Remotion (React-based Programmatic Video Editing)
-- **Use Case**: Cropping 16:9 to 9:16 vertical, rendering stylized animated subtitles, embedding gameplay UI assets, and mixing audio tracks.
+### PostgreSQL (v16+)
+- **Use Case**: Transactional persistent database and analytics engine.
 - **Justification**:
-  - Premium Aesthetics: Doing layouts in HTML/CSS/Canvas is infinitely easier and more beautiful than writing complex, rigid, multi-line FFmpeg terminal commands.
-  - Remotion allows using normal CSS rules (flexbox, gradients, keyframe animations) to build video clips.
-  - Highly robust frame-accurate video synthesis. Every frame is guaranteed to be rendered exactly as designed in React, outputting a flawless high-definition MP4.
+  - High concurrency, full ACID compliance, and robust relational linking.
+  - Unlike lightweight flat-file systems, PostgreSQL natively handles high-concurrency connections from decoupled workers and supports advanced analytical tracking (e.g. channel growth stats, workflow durations).
+
+### Prisma ORM
+- **Use Case**: Database model modeling, migration management, and type-safe query generation.
+- **Justification**:
+  - **Type-Safety**: Auto-generates exact TypeScript types based on `schema.prisma`.
+  - **Prisma Client**: Zero-overhead database client with built-in connection pool management.
+  - **Prisma Migrations**: Handles structural database updates deterministically and safely via SQL migrations.
+
+---
+
+## 3. Messaging & Task Orchestration
+
+### Redis (v7+)
+- **Use Case**: Asynchronous event broker, job store, and state manager.
+- **Justification**:
+  - In-memory speed capable of handling millions of low-latency read/write operations per second.
+  - Perfectly matches BullMQ requirements for atomic state tracking and low-latency locking.
+
+### BullMQ (v5+)
+- **Use Case**: Queue Management, distributed event routing, task throttling, and automatic retries.
+- **Justification**:
+  - **Message Queues**: Decouples heavy rendering, analysis, and API operations into distinct, non-blocking pipeline steps.
+  - **Backpressure**: Standardizes concurrency limits. By adjusting worker instance sizes (e.g. `concurrency: 1` for the Remotion renderer), we prevent GPU-thrashing during high-performance gaming sessions.
+  - **Fault Tolerance**: Implements automatic, exponential backoff retries on task failures (e.g. API timeouts).
+
+---
+
+## 4. Video, Audio & Computer Vision
+
+### Remotion (v4+)
+- **Use Case**: Vertical video programmatic layout, multi-layered visual overlays, and caption animation.
+- **Justification**:
+  - Translates visual layout challenges from rigid FFmpeg commands to standard, expressive React/CSS styles.
+  - Leverages WebGL/Canvas to compose professional, frame-accurate vertical video shorts.
 
 ### FFmpeg (Local Windows Binary)
-- **Use Case**: Trim/slicing videos, extracting keyframes, and serving as the rendering engine for Remotion.
+- **Use Case**: Low-overhead media cropping, slice operations, and keyframe extractions.
 - **Justification**:
-  - The industry-standard tool for video encoding. Light, fast, and highly reliable on Windows.
+  - Unmatched media encoding performance. Serves as the high-speed backend renderer for Remotion.
 
 ---
 
-## 4. Artificial Intelligence (AI) Services
+## 5. Cloud AI Services
 
-### Cloud AI: Gemini 1.5 Flash (via Google AI SDK `@google/genai`)
-- **Use Case**: Creative narration, title/description drafting, and visual overlay content determination.
+### Cloud Vision AI & Gemini 1.5 Flash (Google Cloud AI)
+- **Use Case**: Multimodal gameplay scene analysis, dynamic script composition, and SEO tags compilation.
 - **Justification**:
-  - **Unmatched Price/Performance**: Gemini 1.5 Flash is incredibly cost-efficient, costing pennies per million tokens.
-  - **Large Context & Multimodal**: Can read a series of gameplay keyframes (images) and accurately understand what map is being played, which weapon is used, and what happened in the highlight.
-  - **Structured Outputs**: Gemini native support for JSON Schemas guarantees that the AI returns structured JSON that can be validated via Zod, eliminating output formatting errors.
-
-### Local/Cloud TTS: Edge-TTS or ElevenLabs
-- **Use Case**: Voiceover narration generation with word boundaries.
-- **Justification**:
-  - **Edge-TTS** (Default): A free, open-source Python library that streams voice audio directly from Microsoft Edge's translation services. It has high-quality natural voices and provides precise word offsets (timestamps) for zero cost.
-  - **ElevenLabs** (Optional): High-end human-realistic voice synthesis. It has deep API support for returning character/word-level start and end times, perfect for professional-grade Short creation.
-
----
-
-## 5. Automation & Utilities
-
-- **Chokidar (NPM)**: Node.js library for reliable, platform-agnostic file watching (crucial for Windows directory changes).
-- **Zod (NPM)**: TypeScript schema validation for environment variables and Gemini API responses.
-- **Googleapis (NPM)**: The official SDK for secure, OAuth2-compliant YouTube Data API v3 uploads.
+  - Multimodal input (image frame arrays) allows Gemini to read game scores, weapons, and actions directly from visual contexts.
+  - Structured Output schema validation ensures Gemini always returns exact JSON contracts matching our Zod validators, eliminating text parsing anomalies.

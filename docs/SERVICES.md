@@ -1,160 +1,156 @@
-# Services Specification: Valorant AI Content Automation
+# Services Specifications: Valorant AI Content Automation (Enterprise)
 
-This document provides detailed specifications for each independent service in the **Valorant AI Content Automation** local monorepo.
+This document provides technical design specifications, API endpoints, environmental configurations, and BullMQ payload contracts for each modular service.
 
 ---
 
-## 1. Orchestrator Service (`/apps/orchestrator`)
+## 1. Express API Gateway (`/apps/api-gateway`)
 
-The Core brain of the pipeline. It implements a sequential polling state-machine that transitions jobs through the pipeline via SQLite.
+The HTTP entry point and central coordinator of the platform.
 
-- **Type**: Background daemon (Node.js/TypeScript).
-- **Trigger**: Starts on boot, runs continuously, polling the SQLite database every 10 seconds.
+- **Technology**: Node.js, TypeScript, Express, Prisma, BullMQ.
 - **Responsibilities**:
-  - Monitors the SQLite DB for jobs with statuses that require action.
-  - Spawns local child processes (`cv-parser`, `video-renderer`) or executes internal modules (`cloud-analyzer`, `tts-generator`, `youtube-publisher`).
-  - Manages timeouts (e.g., if rendering takes > 20 mins, mark as failed).
-  - Handles process failures, catches exceptions, and logs them to the job's database row.
-  - Controls concurrency (strictly concurrency = 1 for heavy tasks).
-- **Environment Variables**:
-  - `DB_PATH`: Absolute path to `state.db`.
-  - `POLL_INTERVAL_MS`: Duration between DB checks (default: `10000`).
-  - `MAX_JOB_RETRIES`: Number of retry attempts for failed jobs (default: `2`).
+  - Serves HTTP REST endpoints for job creation, metrics querying, and pipeline trigger management.
+  - Manages database entries in PostgreSQL using Prisma.
+  - Generates and enqueues task payloads into BullMQ.
+- **HTTP Routing Table**:
+  - `POST /api/v1/jobs`: Trigger a raw video ingestion. (Payload: `{ rawVideoPath: string }`).
+  - `GET /api/v1/jobs/:id`: Fetch real-time job status and execution log metrics.
+  - `POST /api/v1/jobs/:id/retry`: Resubmit a failed job into its active state queue.
+  - `GET /api/v1/queues/status`: Monitor BullMQ active, delayed, and failed job counts.
+- **Environment Schema (Zod)**:
+  - `PORT`: Gateway network port (default: `3000`).
+  - `DATABASE_URL`: PostgreSQL connection string.
+  - `REDIS_URL`: Redis connection string (`redis://127.0.0.1:6379`).
 
 ---
 
 ## 2. Capture Monitor (`/apps/capture-monitor`)
 
-A lightweight filesystem observer that registers newly recorded video game-clips.
+A lightweight observer daemon that bridges the physical desktop folder to our API Gateway.
 
-- **Type**: Background daemon (Node.js/TypeScript).
-- **Trigger**: Runs continuously, watching a local Windows directory using `chokidar`.
+- **Technology**: Node.js, TypeScript, `chokidar`, `axios`.
 - **Responsibilities**:
-  - Detects when a new `.mp4` or `.mkv` file is created in the configured captures folder.
-  - Waits until the file is fully written and unlocked (verifies file size doesn't change over a 5-second interval).
-  - Inserts a new row into the SQLite database with `CAPTURE_DETECTED` status and the absolute path of the video.
-- **Environment Variables**:
-  - `DB_PATH`: Path to `state.db`.
-  - `CAPTURES_DIR`: Path to OBS/Shadowplay clips directory (e.g., `C:/Videos/ValorantCaptures`).
-  - `STABILITY_CHECK_MS`: Time to wait to verify file is written (default: `5000`).
+  - Watches local directory path for new video files (`.mp4`, `.mkv`).
+  - Measures file size over 5-second increments to ensure file write completion.
+  - Executes a `POST /api/v1/jobs` call to the API Gateway on detection.
+- **Environment Schema (Zod)**:
+  - `CAPTURES_DIR`: Path to the local OBS recordings folder.
+  - `GATEWAY_URL`: Endpoint of the Express API Gateway (`http://localhost:3000/api/v1`).
 
 ---
 
-## 3. Computer Vision Parser (`/apps/cv-parser`)
+## 3. CV Slicer Worker (`/apps/cv-slicer-worker`)
 
-The local highlight detector. Avoids sending long videos to the cloud by executing zero-cost OpenCV parsing locally.
+A BullMQ worker executing computer vision algorithms.
 
-- **Type**: CLI script (Python 3.10+).
-- **Trigger**: Spawned as a child process by the Orchestrator.
-- **Inputs**:
-  - Raw video path.
-- **Outputs**:
-  - Path of sliced highlight clip.
-  - Array of extracted keyframe images (JPEG).
-  - Metadata text (Map name, Score, Kills detected).
-- **Responsibilities**:
-  - Opens the video file frame-by-frame.
-  - Uses OpenCV Template Matching to detect the **Kill Skull Icon** overlay at the bottom-center of the screen.
-  - Detects consecutive kills (multi-kills) based on timestamps.
-  - Identifies the maximum-action segment (e.g., a 4-kill clutch sequence).
-  - Trim/slice the video using local FFmpeg to a vertical-friendly duration (typically 20-40 seconds).
-  - Extract exactly 5 keyframes (e.g., at round-win announcement, final kill skull display, score transition) to assist Gemini analysis.
-- **Environment Variables**:
-  - `CV_CONFIDENCE_THRESHOLD`: Matching precision index (default: `0.85`).
-  - `OUTPUT_DIR`: Path to save highlight clips and keyframes.
+- **Technology**: Node.js, TypeScript, Python child process spawning, OpenCV, NumPy, FFmpeg.
+- **Queue Bound**: `cv-slicer-queue`
+- **Job Payload Contract**:
+  ```typescript
+  interface CVSlicerJobPayload {
+    jobId: string;
+    rawVideoPath: string;
+  }
+  ```
+- **Execution Logic**:
+  - Spawns a localized Python CV script to detect "Kill Skull" game graphics.
+  - Trim/slice raw game footage into a 15-45s clip using FFmpeg.
+  - Extract exactly 5 JPEG keyframes representing climax events.
+  - Writes data to disk, updates the Prisma database, and enqueues a job into `cloud-ai-queue`.
 
 ---
 
-## 4. Cloud Analyzer (`/apps/cloud-analyzer`)
+## 4. Cloud AI Worker (`/apps/cloud-ai-worker`)
 
-Connects to Google Cloud/Gemini to perform high-level gameplay understanding and creative copy generation.
+A BullMQ worker leveraging multimodal cloud models for play synthesis.
 
-- **Type**: Node.js/TypeScript module.
-- **Trigger**: Executed by the Orchestrator.
-- **Inputs**:
-  - Sliced highlight video path.
-  - List of extracted keyframe image paths.
-  - Gameplay metadata from the CV Parser.
-- **Outputs**:
-  - Structured JSON: Voiceover script, YouTube title, tags, description, overlay text captions, and theme styling recommendations.
-- **Responsibilities**:
-  - Packages the keyframes, metadata, and specialized prompt into a single request.
-  - Sends the request to **Gemini 1.5 Flash API** using the `@google/genai` library.
-  - Leverages structured output schemas to force Gemini to return exactly the required JSON contract.
-- **Environment Variables**:
-  - `GEMINI_API_KEY`: API key for Gemini.
-  - `GEMINI_MODEL`: Model name (default: `gemini-1.5-flash`).
-
----
-
-## 5. TTS Generator (`/apps/tts-generator`)
-
-Generates the commentary audio track and extracts word-timestamp alignments.
-
-- **Type**: Node.js/TypeScript module.
-- **Trigger**: Executed by the Orchestrator.
-- **Inputs**:
-  - Voiceover script text.
-- **Outputs**:
-  - Voiceover MP3 path.
-  - Word timestamps JSON array (each word mapped to its start/end milliseconds).
-- **Responsibilities**:
-  - Connects to ElevenLabs API or runs local `edge-tts`.
-  - Sends the Gemini script and returns the synthesized MP3 audio.
-  - Extracts word alignment timestamps (e.g., ElevenLabs supports `websocket` and REST-based alignment endpoints; `edge-tts` provides local tokenized word offsets).
-  - Saves the audio file to `/temp_audio/` and timestamps to the database.
-- **Environment Variables**:
-  - `TTS_PROVIDER`: `elevenlabs` or `edge-tts` (default: `edge-tts` for cost-free run).
-  - `ELEVEN_LABS_API_KEY`: ElevenLabs key (if provider is elevenlabs).
-  - `TTS_VOICE_ID`: Target voice model.
+- **Technology**: Node.js, TypeScript, Google Cloud Vision, `@google/genai` (Gemini API), Prisma.
+- **Queue Bound**: `cloud-ai-queue`
+- **Job Payload Contract**:
+  ```typescript
+  interface CloudAIJobPayload {
+    jobId: string;
+    keyframesDir: string;
+    metadata: {
+      mapName?: string;
+      rawKillsCount?: number;
+    };
+  }
+  ```
+- **Execution Logic**:
+  - Encodes keyframe images to base64 and constructs a multimodal analysis prompt.
+  - Sends requests to Gemini 1.5 Flash API with strict response schemas.
+  - Saves the generated narration script and YouTube SEO metadata to PostgreSQL via Prisma.
+  - Enqueues job to `tts-voice-queue`.
 
 ---
 
-## 6. Video Renderer (`/apps/video-renderer`)
+## 5. TTS Voice Worker (`/apps/tts-voice-worker`)
 
-Programmatically composites and compiles the final 9:16 vertical MP4 video using Remotion and React.
+A BullMQ worker handling voice generation and dynamic boundary alignment.
 
-- **Type**: React/TypeScript WebGL composition, compiled via Remotion CLI.
-- **Trigger**: Spawned as a child process by the Orchestrator.
-- **Inputs**:
-  - Highlight video path.
-  - Voiceover MP3 path.
-  - Word timestamps JSON.
-  - Visual metadata (Agent, scoreboard).
-- **Outputs**:
-  - Premium vertical MP4 (`/output/{job_id}.mp4`).
-- **Responsibilities**:
-  - Crops the input 16:9 gameplay to 9:16 vertical.
-  - Tracks player crosshair (default: screen center, or dynamic offset).
-  - Captures and overlays scaled-up gameplay UI assets (kill feed, round score).
-  - Renders highly stylized, animated, word-by-word subtitles matching the voiceover audio track.
-  - Merges original video audio + TTS MP3 + background royalty-free track, applying auto-ducking to the music when voice or game audio spikes.
-  - Renders the frame stack to high-quality MP4 using Remotion's multi-core CPU/GPU rendering engine.
-- **Environment Variables**:
-  - `REMOTION_CONCURRENCY`: Number of CPU cores to assign for rendering (default: `4`).
-  - `RENDER_QUALITY`: FFmpeg quality index.
+- **Technology**: Node.js, TypeScript, Microsoft Edge-TTS or ElevenLabs, Prisma.
+- **Queue Bound**: `tts-voice-queue`
+- **Job Payload Contract**:
+  ```typescript
+  interface TTSVoiceJobPayload {
+    jobId: string;
+    scriptText: string;
+  }
+  ```
+- **Execution Logic**:
+  - Dispatches script to synthesized voice generator API.
+  - Captures word boundary timing structures (exact millisecond duration of each spoken word).
+  - Saves voiceover MP3 and subtitle timing JSON to PostgreSQL and local disk.
+  - Enqueues job to `video-render-queue`.
 
 ---
 
-## 7. YouTube Publisher (`/apps/youtube-publisher`)
+## 6. Remotion Render Worker (`/apps/video-render-worker`)
 
-Safely publishes the finished video to YouTube.
+A BullMQ worker compiling high-fidelity portrait videos.
 
-- **Type**: Node.js/TypeScript module.
-- **Trigger**: Executed by the Orchestrator.
-- **Inputs**:
-  - Rendered video path (`.mp4`).
-  - YouTube Metadata JSON (Title, Description, Tags).
-- **Outputs**:
-  - Scheduled YouTube Video ID.
-- **Responsibilities**:
-  - Standardizes the video file upload chunking.
-  - Uses the official `googleapis` NPM client.
-  - Signs in securely using a stored local refresh token.
-  - Uploads the video, setting the title (including `#Shorts`), description, tags, category, and privacy status.
-  - Schedules the release time based on the daily queue config (e.g., 10:00 AM local time).
-- **Environment Variables**:
-  - `YT_CLIENT_ID`: OAuth client ID.
-  - `YT_CLIENT_SECRET`: OAuth client secret.
-  - `YT_REFRESH_TOKEN`: Secured local refresh token.
-  - `YT_PUBLISH_HOUR`: Hour of day to schedule (0-23, default: `10`).
+- **Technology**: Node.js, TypeScript, React, Remotion, FFmpeg, Prisma.
+- **Queue Bound**: `video-render-queue`
+- **Concurrency Limit**: **`1`** (To protect GPU resources during gameplay).
+- **Job Payload Contract**:
+  ```typescript
+  interface VideoRenderJobPayload {
+    jobId: string;
+    highlightVideoPath: string;
+    voiceoverAudioPath: string;
+    wordTimestampsPath: string;
+    visualMetadata: {
+      agent: string;
+      captionColor: string;
+      titleOverlay: string;
+    };
+  }
+  ```
+- **Execution Logic**:
+  - Triggers Remotion CLI render engine.
+  - Compiles React timelines (game cropping, animated captions, HUD overlays, audio mixing) into a vertical MP4.
+  - Updates PostgreSQL database state to `RENDER_COMPLETED` via Prisma and enqueues job to `publishing-queue`.
+
+---
+
+## 7. YouTube Publisher Worker (`/apps/youtube-publisher-worker`)
+
+A BullMQ worker completing the automation cycle.
+
+- **Technology**: Node.js, TypeScript, Googleapis SDK, Prisma.
+- **Queue Bound**: `publishing-queue`
+- **Job Payload Contract**:
+  ```typescript
+  interface PublishingJobPayload {
+    jobId: string;
+    renderedVideoPath: string;
+    publishTime: string;
+  }
+  ```
+- **Execution Logic**:
+  - Signs into Google APIs via local rotating OAuth2 refresh tokens.
+  - Uploads chunked MP4 video as a vertical YouTube Short.
+  - Schedules Short publishing based on the database queue profiles.
+  - Sets job status to `COMPLETED` in PostgreSQL, then triggers database file-cleanup events.

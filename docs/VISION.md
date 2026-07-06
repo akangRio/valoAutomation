@@ -1,75 +1,51 @@
-# Product Vision: Valorant AI Content Automation
+# Product Vision: Valorant AI Content Automation (Enterprise Edition)
 
-This document outlines the product vision, target audience, core user experience, and success metrics for the **Valorant AI Content Automation** pipeline.
+This document outlines the product vision, target market, competitive advantages, and core workflows for the **Valorant AI Content Automation** platform.
 
 ---
 
-## 1. The Opportunity & Product Vision
+## 1. Product Statement
 
 ### The Problem
-Short-form content (YouTube Shorts, TikTok, Instagram Reels) is the fastest-growing medium for gamer engagement. However, consistently creating high-quality, entertaining short-form videos is a massive time sink:
-1. **Highlight Hunting**: Sifting through hours of raw gameplay to find clutches, aces, and multikills.
-2. **Editing Bottlenecks**: Cropping 16:9 gameplay to 9:16 vertical, tracking the player's crosshair, synchronizing background music, and adding engaging, animated subtitles.
-3. **Narrative Writing**: Adding voiceovers or commentary to make the clip stand out from millions of others.
-4. **Publishing Friction**: Uploading, tagging, writing descriptions, and scheduling every single day.
+Short-form content is the highest-engagement medium for gaming channels. Consistently publishing high-production-value YouTube Shorts requires hours of tedious work: sifting through gameplay, cropping 16:9 widescreen footage to 9:16 vertical, tracking crosshairs, writing narration scripts, generating voiceover audio, rendering overlays, and scheduling on YouTube. Creators who fail to post daily miss out on algorithmic channel growth.
 
-Because of this friction, content creators fail to remain consistent, resulting in low channel growth.
-
-### The Solution: Valorant AI Content Automation
-A zero-click, local-hybrid AI system that runs in the background of a creator's Windows gaming PC. 
-- As they play Valorant, the system detects highlight clips (e.g., using lightweight, local computer vision).
-- Once a session ends, the system automatically writes a compelling narrative script, generates professional voiceover, crops and composites the video in vertical 9:16 format with high-fidelity, animated subtitles using React-based rendering (Remotion), and schedules the video to YouTube.
-- **The Creator's Experience**: Play the game. Shut down the PC. Wake up to a scheduled YouTube Short. Zero editing, zero rendering, zero uploading required.
+### The Solution
+A professional-grade, zero-click automation platform. By utilizing local GPU/CPU hardware for heavy operations (OpenCV CV Parsing, Remotion React-based Video Compositing, and FFmpeg compiling) and cloud-based AI (Cloud Vision AI & Gemini) for intelligent narration, scriptwriting, and SEO metadata, creators can automate their entire daily content pipeline.
+- **The Creator Experience**: Play the game. Save clip. The system automatically extracts highlights, drafts an engaging story, generates realistic commentary, renders a vertical short with animated captions, and schedules it to YouTube.
 
 ---
 
-## 2. Core User Experience (UX)
+## 2. Competitive Edge & Value Proposition
 
-The system is built on **Zero-Friction User Experience**. The creator should not have to open a complex video editor or dashboard daily.
+1. **Local-Hybrid Architecture**: Keeps server running costs extremely low (under **$0.05 per video**). No expensive cloud rendering GPU fleets are needed.
+2. **Professional Aesthetics**: Unlike dry, standard text-to-speech video edits, the platform composites rich, vertical, crosshair-tracked gameplay overlaid with high-fidelity, custom-animated captions and game HUD tracking using **Remotion**.
+3. **Robust Processing Engine**: Powered by **BullMQ**, **Redis**, and **PostgreSQL**, the pipeline handles queue processing, task concurrency, failover retries, and media storage safely on the Windows host.
+
+---
+
+## 3. Core Enterprise Workflows
 
 ```mermaid
 journey
-    title Daily Creator Workflow
-    section Gaming Session
-      Launch Valorant: 5: Creator launches game
-      Play & Hit Clips: 5: Creator plays; OBS Replay Buffer saves clips via hotkey or auto-trigger
-    section Automated Processing
-      Detect Highlights: 9: OpenCV monitors clips folder, identifies the kills/clutches
-      Generate Narrative: 9: Gemini analyzes highlights, writes script & metadata
-      Generate Voiceover: 9: TTS service creates high-quality voice file
-      Render Video: 9: Remotion renders 9:16 vertical video with animated subtitles
-    section Delivery
-      Publish to YouTube: 9: YouTube service uploads video as a scheduled Short
-      Mobile Notification: 9: Creator gets a notification: "Your Short for tomorrow is scheduled!"
+    title Enterprise Creator Video Journey
+    section Local Ingestion
+      OBS Saves Clip: 5: Creator hotkey/OBS triggers raw file save
+      Monitor registers job: 5: Capture Monitor pushes work to BullMQ Queue via Prisma
+    section Processing Pipeline
+      CV Extract Highlights: 9: Computer Vision worker trims video and gathers keyframes
+      Cloud AI Scriptwriting: 9: Cloud Vision AI & Gemini write commentary script & tags
+      TTS Generation: 9: TTS service synthesizes audio & syncs word-boundaries
+      Remotion Compositing: 9: React video-renderer compiles 9:16 MP4 using FFmpeg
+    section Publishing & Scaling
+      YouTube Upload: 9: Publisher uploads and schedules Short via official API
+      Database Logged: 9: PostgreSQL records upload metrics and triggers disk cleanup
 ```
 
 ---
 
-## 3. Core Features of the Generated Shorts
+## 4. Key Performance Indicators (KPIs)
 
-To maximize viewer retention and engagement, the generated YouTube Shorts must look like they were edited by a professional human editor:
-1. **Dynamic 9:16 Focus**: Center-crop the gameplay, but dynamically scale/re-center to keep the player's crosshair or key action always in frame.
-2. **Interactive UI Overlays**: Scale up and overlay the game's killfeed, round scoreboard, and active abilities at the top/bottom of the vertical frame so viewers don't miss the context of the play.
-3. **Animated Subtitles (Word-by-Word)**: Stylized, high-impact subtitles (e.g., yellow/white text with a black outline, scaling up as they are spoken) synchronized perfectly with the voiceover.
-4. **Polished Voiceover**: Compelling, energetic commentary (e.g., analyzing the positioning, crosshair placement, or game sense) rather than dry text-to-speech.
-5. **Background Music Integration**: Royalty-free hype music ducked dynamically under the voiceover and gunshots.
-
----
-
-## 4. Business and Growth Goals
-
-- **Daily Consistency**: Successfully publish exactly **one video per day**, 365 days a year, without manual intervention.
-- **Low Operating Costs**: Keep the cloud cost per video under **$0.05** by running OpenCV parsing, Remotion rendering, and local TTS entirely on the Windows PC, reserving Gemini strictly for text analysis.
-- **Organic Channel Growth**: Build a self-sustaining audience base on YouTube Shorts, leveraging SEO-optimized metadata generated by Gemini.
-
----
-
-## 5. Success Metrics
-
-| Metric | Target | How it is Measured |
-| :--- | :--- | :--- |
-| **Automation Success Rate** | > 95% | Jobs that go from raw clip to scheduled YouTube upload without human correction. |
-| **Processing Time** | < 15 mins | Time elapsed from file creation in raw captures folder to completed YouTube upload. |
-| **Cloud Cost per Short** | < $0.05 | Gemini token cost API billing monitoring. |
-| **Retention Rate** | > 60% | Viewer retention on YouTube Shorts analytics. |
-| **Zero-Intervention Run** | 14 days | Continuous error-free operation of all background services. |
+- **Zero-Click Success Rate**: > 98% of captured clips must render and schedule on YouTube without manual correction.
+- **Video Render Latency**: < 10 minutes for a complete, high-definition 60fps vertical Short compilation.
+- **Resource Footprint**: Minimal overhead on the Windows host during gaming sessions, achieved by limiting background process concurrency.
+- **Audience Engagement**: Standardized caption style increases short-form average watch duration (retention > 70%).

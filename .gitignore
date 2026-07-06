@@ -1,0 +1,39 @@
+# Dependecies
+node_modules/
+jspm_packages/
+.pnpm-store/
+
+# Builds and outputs
+dist/
+build/
+.turbo/
+out/
+
+# Python Virtual Environments
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local storage and heavy media (vital local storage rule)
+storage/
+captures/
+highlights/
+keyframes/
+temp_audio/
+output/
+
+# Local configurations, secrets and databases
+.env
+.env.local
+.env.*.local
+*.log
+*.db
+*.db-journal
+*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
