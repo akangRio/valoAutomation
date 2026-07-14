@@ -58,6 +58,19 @@ This document defines the detailed, granular technical task board for implementi
 
 ---
 
+### Task 1.5: Configure PM2 Local Process Orchestration
+
+- **Objective**: Configure PM2 process management to run, manage, and monitor all local services (API gateway and background workers) in a unified local orchestration environment.
+- **Dependencies**: Task 1.4.
+- **Estimated Complexity**: Low.
+- **Affected Services**: All monorepo services (`api-gateway`, `cv-slicer-worker`, `cloud-ai-worker`, `tts-voice-worker`, `video-render-worker`).
+- **Acceptance Criteria**:
+  - `ecosystem.config.js` is established in the workspace root and `infrastructure/` directory.
+  - Correctly defines and names processes for all active services, specifying running directories (`cwd`), target scripts (`npx ts-node src/index.ts` / `src/worker.ts`), and development environments.
+  - Standardizes background startup (`pm2 start ecosystem.config.js`), automatic restarts on failure, and consolidated logging via `pm2 logs`.
+
+---
+
 ## Milestone 2: Computer Vision Slicer Worker
 
 ### Task 2.1: Establish CV Slicer Worker and Python Virtual Env

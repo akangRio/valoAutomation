@@ -31,8 +31,8 @@ This document defines the high-level roadmap and milestones for the **Valorant A
 
 _Establish the central Express API Gateway, Prisma PostgreSQL database client, and BullMQ Redis queues._
 
-- **Scope**: Setting up the monorepo workspace configurations, drafting database schemas inside `schema.prisma`, migrating to PostgreSQL, implementing the Express REST API, and initializing Redis BullMQ queues.
-- **Working System**: A functional API and database backend. Submitting a `POST /api/v1/jobs` HTTP request creates a `PENDING` job record in PostgreSQL via Prisma, and enqueues a task payload in the `cv-slicer-queue` managed by Redis.
+- **Scope**: Setting up the monorepo workspace configurations, drafting database schemas inside `schema.prisma`, migrating to PostgreSQL, implementing the Express REST API, initializing Redis BullMQ queues, and configuring **PM2 local process management** via `ecosystem.config.js` to manage all API and background worker processes.
+- **Working System**: A functional API, database backend, and automated process runner. Submitting a `POST /api/v1/jobs` HTTP request creates a `PENDING` job record in PostgreSQL via Prisma, and enqueues a task payload in the `cv-slicer-queue` managed by Redis. All background services run as managed processes under **PM2**, enabling unified orchestration and centralized log streams.
 - **Integration Risk Mitigated**: Guarantees database state-machine safety and message Broker connectivity before implementing complex media workers.
 
 ---

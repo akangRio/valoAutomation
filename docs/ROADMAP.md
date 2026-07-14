@@ -31,7 +31,8 @@ Our engineering path is broken into 5 technical milestones, prioritizing the cre
   - Formulate database models inside `packages/database/prisma/schema.prisma`.
   - Establish Express API controller routing for raw video ingestion and metrics monitoring.
   - Implement Zod schema validation checks for incoming HTTP requests.
-- **Milestone 1 Deliverable**: An active Express API Gateway and local PostgreSQL database where a REST call registers jobs, sets their status to `PENDING` via Prisma, and successfully pushes payload items to Redis.
+  - Configure local process management via PM2 (`ecosystem.config.js`) to orchestrate and run background processes.
+- **Milestone 1 Deliverable**: An active Express API Gateway and local PostgreSQL database where a REST call registers jobs, sets their status to `PENDING` via Prisma, and successfully pushes payload items to Redis, with all backend services orchestrated and managed in the background via PM2.
 
 ### Phase 2: CV Slicer Worker (Computer Vision)
 
